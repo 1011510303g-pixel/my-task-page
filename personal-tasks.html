@@ -2485,10 +2485,14 @@
           <input
             id="pb-login-server"
             name="server"
-            type="url"
+            type="text"
+            inputmode="url"
+            autocomplete="url"
+            spellcheck="false"
+            autocapitalize="off"
             class="tf-input w-full rounded-lg border px-3 py-2 text-sm"
             style="border-color: var(--tf-border-strong); background: color-mix(in srgb, var(--tf-card) 85%, #000); color: var(--tf-text);"
-            placeholder="空欄＝このページと同じホスト"
+            placeholder="既定: pb.to-do-management0034.com（空欄でも同じ URL が使われます）"
           />
         </div>
         <p id="pb-login-error" class="text-sm" role="alert" aria-live="polite"></p>
@@ -3048,8 +3052,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.23.0/dist/pocketbase.umd.js"></script>
   <!-- 認証情報は HTML に書かない。ログインフォームで入力する。 -->
-  <!-- GitHub Pages 等で PocketBase が別ホストのときだけ、次の 1 行のコメントを外してベース URL を設定（例: trycloudflare） -->
-  <!-- <script>window.TF_PB_BASE_URL = 'https://あなたのトンネル.trycloudflare.com';</script> -->
+  <!-- PocketBase の公開先（Cloudflare Tunnel の Public Hostname と一致させる / 末尾スラッシュなし） -->
+  <script>
+    window.TF_PB_BASE_URL = 'https://pb.to-do-management0034.com';
+  </script>
   <script>
     (function () {
       var MS_DAY = 86400000;
@@ -8166,9 +8172,15 @@
         var hint = localStorage.getItem('tf_pb_login_email_hint');
         var emEl = document.getElementById('pb-login-email');
         if (hint && emEl) emEl.value = hint;
-        var urlHint = localStorage.getItem('tf_pb_base_url_hint');
         var srvEl = document.getElementById('pb-login-server');
-        if (urlHint && srvEl && !srvEl.value) srvEl.value = urlHint;
+        if (srvEl && !srvEl.value) {
+          if (typeof window.TF_PB_BASE_URL === 'string' && window.TF_PB_BASE_URL.trim())
+            srvEl.value = window.TF_PB_BASE_URL.trim().replace(/\/$/, '');
+          else {
+            var urlHint = localStorage.getItem('tf_pb_base_url_hint');
+            if (urlHint) srvEl.value = urlHint;
+          }
+        }
       } catch (eHint) {}
 
       tryResumePocketBaseSession('')
