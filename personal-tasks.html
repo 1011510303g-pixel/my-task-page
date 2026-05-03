@@ -4021,6 +4021,62 @@
           });
       }
 
+      /** PocketBase JS の ClientResponseError 等からユーザー向け文言を組み立てる */
+      function formatPocketBaseLoginError(e) {
+        if (!e) return 'ログインに失敗しました。URL・メール・パスワードを確認してください。';
+        var msg = e.message != null ? String(e.message).trim() : '';
+        if (msg && msg !== 'Something went wrong.' && msg !== 'Failed to fetch.') return msg;
+        try {
+          if (e.data && e.data.message) return String(e.data.message);
+        } catch (e1) {}
+        try {
+          var r = e.response;
+          if (r && r.data && r.data.message) return String(r.data.message);
+        } catch (e2) {}
+        if (e.status === 0 || (msg && msg.indexOf('Failed to fetch') !== -1)) {
+          return 'サーバーに接続できません（ネットワークまたは URL を確認してください）。';
+        }
+        if (e.status)
+          return (
+            'サーバーが HTTP ' +
+            e.status +
+            ' を返しました。PocketBase の URL・メール・パスワードを確認してください。'
+          );
+        if (e.originalError && e.originalError.message) return String(e.originalError.message);
+        return 'ログインに失敗しました。URL・メール・パスワードを確認してください。';
+      }
+
+      function withLoginTimeout(ms, promise) {
+        return new Promise(function (resolve, reject) {
+          var done = false;
+          var t = setTimeout(function () {
+            if (done) return;
+            done = true;
+            reject(
+              new Error(
+                '接続がタイムアウトしました（' +
+                  Math.round(ms / 1000) +
+                  '秒）。ネットワーク・VPN・PocketBase の URL を確認してください。'
+              )
+            );
+          }, ms);
+          promise.then(
+            function (v) {
+              if (done) return;
+              done = true;
+              clearTimeout(t);
+              resolve(v);
+            },
+            function (err) {
+              if (done) return;
+              done = true;
+              clearTimeout(t);
+              reject(err);
+            }
+          );
+        });
+      }
+
       function initPocketBaseSync(email, password, baseUrlOverride) {
         return new Promise(function (resolve, reject) {
           if (typeof PocketBase === 'undefined') {
@@ -8420,6 +8476,7 @@
           var emailIn = document.getElementById('pb-login-email');
           var passIn = document.getElementById('pb-login-password');
           var srvIn = document.getElementById('pb-login-server');
+          var submitBtn = document.getElementById('pb-login-submit');
           var email = emailIn ? emailIn.value : '';
           var pass = passIn ? passIn.value : '';
           var srv = srvIn && srvIn.value ? srvIn.value.trim() : '';
@@ -8427,22 +8484,55 @@
             showPbLoginError('メールアドレスとパスワードを入力してください。');
             return;
           }
-          initPocketBaseSync(email, pass, srv)
+          var prevBtnText = submitBtn ? submitBtn.textContent : '';
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.setAttribute('aria-busy', 'true');
+            submitBtn.textContent = 'ログイン中…';
+          }
+          if (emailIn) emailIn.disabled = true;
+          if (passIn) passIn.disabled = true;
+          if (srvIn) srvIn.disabled = true;
+
+          function restoreLoginFormControls() {
+            if (submitBtn) {
+              submitBtn.disabled = false;
+              submitBtn.removeAttribute('aria-busy');
+              submitBtn.textContent = prevBtnText || 'ログインして続行';
+            }
+            if (emailIn) emailIn.disabled = false;
+            if (passIn) passIn.disabled = false;
+            if (srvIn) srvIn.disabled = false;
+          }
+
+          withLoginTimeout(45000, initPocketBaseSync(email, pass, srv))
             .then(function (appliedFromServer) {
               try {
                 localStorage.setItem('tf_pb_login_email_hint', String(email).trim());
                 localStorage.setItem('tf_pb_base_url_hint', resolvePbBaseUrl(srv));
               } catch (eLs) {}
               hidePbLogin();
-              startMainApp(appliedFromServer);
+              try {
+                startMainApp(appliedFromServer);
+              } catch (eStart) {
+                restoreLoginFormControls();
+                if (typeof console !== 'undefined' && console.error) console.error('TeamFlow startMainApp:', eStart);
+                showPbLoginError(
+                  eStart && eStart.message
+                    ? '起動に失敗しました: ' + String(eStart.message)
+                    : '起動処理でエラーが発生しました。ページを再読み込みしてください。'
+                );
+                var ov = document.getElementById('pb-login-overlay');
+                if (ov) ov.classList.remove('hidden');
+                return;
+              }
             })
             .catch(function (e) {
               if (typeof console !== 'undefined' && console.warn) console.warn('TeamFlow login:', e);
-              var m =
-                e && e.message
-                  ? String(e.message)
-                  : 'ログインに失敗しました。URL・メール・パスワードを確認してください。';
-              showPbLoginError(m);
+              showPbLoginError(formatPocketBaseLoginError(e));
+            })
+            .then(function () {
+              restoreLoginFormControls();
             });
         });
       }
