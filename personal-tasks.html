@@ -2137,8 +2137,10 @@
       align-items: stretch;
     }
     .tf-team-project-tl-grid--fit {
+      --tf-team-tl-scale: 1;
       flex: 1;
       min-height: 0;
+      width: 100%;
       height: 100%;
       grid-template-rows: repeat(var(--tf-team-tl-rows), minmax(0, 1fr));
       align-content: stretch;
@@ -2192,6 +2194,7 @@
       color: #fff;
       text-align: center;
       word-break: break-word;
+      flex-shrink: 0;
     }
     button.tf-team-tl-card__head {
       width: 100%;
@@ -2239,11 +2242,18 @@
       background: var(--tf-card);
       overflow: hidden;
     }
+    .tf-team-project-tl-grid--fit .tf-team-tl-card__body {
+      gap: calc(0.3rem * var(--tf-team-tl-scale, 1));
+      padding: calc(0.28rem * var(--tf-team-tl-scale, 1)) calc(0.3rem * var(--tf-team-tl-scale, 1))
+        calc(0.36rem * var(--tf-team-tl-scale, 1));
+    }
     .tf-team-tl-sphere {
-      width: clamp(2.35rem, 28cqi, 3.35rem);
-      height: clamp(2.35rem, 28cqi, 3.35rem);
+      width: clamp(2rem, 26cqi, 3.35rem);
+      height: clamp(2rem, 26cqi, 3.35rem);
       border-radius: 9999px;
       flex-shrink: 0;
+      min-width: 2rem;
+      min-height: 2rem;
       box-shadow: inset 0 -10px 18px rgba(0, 0, 0, 0.18), inset 0 10px 14px rgba(255, 255, 255, 0.22);
     }
     .tf-team-tl-sphere--green {
@@ -2261,6 +2271,26 @@
         height: 3rem;
       }
     }
+    .tf-team-project-tl-grid--fit .tf-team-tl-sphere {
+      width: clamp(
+        calc(1.35rem * var(--tf-team-tl-scale, 1)),
+        calc(2.5rem * var(--tf-team-tl-scale, 1)),
+        calc(3.1rem * var(--tf-team-tl-scale, 1))
+      );
+      height: clamp(
+        calc(1.35rem * var(--tf-team-tl-scale, 1)),
+        calc(2.5rem * var(--tf-team-tl-scale, 1)),
+        calc(3.1rem * var(--tf-team-tl-scale, 1))
+      );
+      min-width: calc(1.35rem * var(--tf-team-tl-scale, 1));
+      min-height: calc(1.35rem * var(--tf-team-tl-scale, 1));
+      flex-shrink: 1;
+    }
+    .tf-team-project-tl-grid--fit button.tf-team-tl-card__head {
+      font-size: calc(0.8125rem * var(--tf-team-tl-scale, 1));
+      min-height: calc(2.65rem * var(--tf-team-tl-scale, 1));
+      padding: calc(0.42rem * var(--tf-team-tl-scale, 1)) calc(0.5rem * var(--tf-team-tl-scale, 1));
+    }
     .tf-team-tl-msg {
       margin: 0;
       font-size: 0.8125rem;
@@ -2269,11 +2299,21 @@
       line-height: 1.45;
       color: var(--tf-page-text);
       padding: 0 0.15rem;
+      flex-shrink: 0;
+      align-self: stretch;
+      min-height: calc(0.8125rem * 1.45 * 2);
+      max-height: calc(0.8125rem * 1.45 * 3);
       display: -webkit-box;
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 3;
+      line-clamp: 3;
       overflow: hidden;
       word-break: break-word;
+    }
+    .tf-team-project-tl-grid--fit .tf-team-tl-msg {
+      font-size: calc(0.8125rem * var(--tf-team-tl-scale, 1));
+      min-height: calc(0.8125rem * var(--tf-team-tl-scale, 1) * 1.45 * 2);
+      max-height: calc(0.8125rem * var(--tf-team-tl-scale, 1) * 1.45 * 3);
     }
 
     /* 業務向け: 視覚ノイズを抑えたシンプルなサーフェス */
@@ -3165,6 +3205,7 @@
         return new Date(t.getFullYear(), t.getMonth(), t.getDate());
       }
 
+      function formatJpCalendarDate(d) {
         var wk = ['日', '月', '火', '水', '木', '金', '土'];
         return (
           d.getFullYear() +
@@ -5494,59 +5535,62 @@
       }
 
       /**
-       * 案件数 n と最大列数の範囲で、末尾行の空きセルを最小化する列数（同率なら列を多め）。
-       * 例: n=9,max=4 → 3列（3×3）。n=7,max=4 → 4列（2+2+2+1 より空セルが少ない組合せを選ぶ）。
+       * grid の gap（computed）から row-gap / column-gap のピクセル値を推定。
        */
-      function pickTeamStatusGridColumns(n, maxCols) {
-        if (n <= 0) return 1;
-        var maxC = Math.min(maxCols, n);
-        var minC = n <= 2 ? 1 : Math.min(2, maxC);
-        var c;
-        var bestC = maxC;
-        var bestWaste = Infinity;
-        for (c = minC; c <= maxC; c++) {
-          var waste = Math.ceil(n / c) * c - n;
-          if (waste < bestWaste || (waste === bestWaste && c > bestC)) {
-            bestWaste = waste;
-            bestC = c;
+      function parseCssGridGapsPx(gapStr) {
+        var def = { row: 10, col: 10 };
+        var s = String(gapStr || '').trim();
+        if (!s) return def;
+
+        function one(tok) {
+          var mpx = /^([\d.]+)px$/.exec(tok);
+          if (mpx) return Number(mpx[1]);
+          var mrem = /^([\d.]+)rem$/.exec(tok);
+          if (mrem) {
+            var rootFs = parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+            return Number(mrem[1]) * rootFs;
           }
+          return 10;
         }
-        return bestC;
+
+        var parts = s.split(/\s+/);
+        if (parts.length > 1) {
+          return { row: one(parts[0]), col: one(parts[1]) };
+        }
+        var v = one(parts[0]);
+        return { row: v, col: v };
       }
 
       /**
-       * グリッド領域の実寸（availGridW×availGridH）に収まる列・行を選ぶ。
-       * 空セル（waste）を小さくしつつ、セルが小さすぎないよう min を段階的に緩める。
+       * グリッド領域の幅に収まる列数を選ぶ。行は minmax(0,1fr) で均等割りし、--tf-team-tl-scale で文字・球を縮小する。
        */
-      function pickTeamStatusGridLayoutFitting(n, maxCols, availGridW, availGridH) {
-        var gapPx = 10;
-        if (n <= 0 || availGridW < 60 || availGridH < 100) {
+      function pickTeamStatusGridLayoutFitting(n, maxCols, availGridW, gapPx) {
+        gapPx = typeof gapPx === 'number' && !isNaN(gapPx) ? gapPx : 10;
+        if (n <= 0 || availGridW < 60) {
           return { cols: 1, rows: Math.max(1, n) };
         }
         var minC = n <= 2 ? 1 : Math.min(2, maxCols);
         var shrink;
-        for (shrink = 0; shrink < 8; shrink++) {
-          var minCellW = Math.max(48, 62 - shrink * 4);
-          var minCellH = Math.max(52, 78 - shrink * 6);
+        for (shrink = 0; shrink < 10; shrink++) {
+          var minCellW = Math.max(56, 76 - shrink * 5);
           var bestC = 1;
           var bestR = Math.ceil(n / Math.min(maxCols, Math.max(1, n)));
           var bestWaste = Infinity;
-          var bestMinSide = -1;
+          var bestMinCW = -1;
           var c;
           for (c = minC; c <= Math.min(maxCols, n); c++) {
-            var r = Math.ceil(n / c);
             var cw = (availGridW - gapPx * Math.max(0, c - 1)) / c;
-            var ch = (availGridH - gapPx * Math.max(0, r - 1)) / r;
-            if (cw < minCellW || ch < minCellH) continue;
+            if (cw < minCellW) continue;
+            var r = Math.ceil(n / c);
             var waste = r * c - n;
-            var minSide = Math.min(cw, ch);
+            var minSide = cw;
             if (
               waste < bestWaste ||
-              (waste === bestWaste && minSide > bestMinSide) ||
-              (waste === bestWaste && minSide === bestMinSide && c > bestC)
+              (waste === bestWaste && minSide > bestMinCW) ||
+              (waste === bestWaste && minSide === bestMinCW && c > bestC)
             ) {
               bestWaste = waste;
-              bestMinSide = minSide;
+              bestMinCW = minSide;
               bestC = c;
               bestR = r;
             }
@@ -5577,10 +5621,24 @@
         var gpH = gridPanel.clientHeight;
         if (gpW < 48 || gpH < 48) return;
 
+        var gapStr = window.getComputedStyle(grid).gap;
+        var gaps = parseCssGridGapsPx(gapStr);
+
         var maxCols = teamStatusMaxColsForViewport();
-        var lay = pickTeamStatusGridLayoutFitting(n, maxCols, gpW, gpH);
+        var lay = pickTeamStatusGridLayoutFitting(n, maxCols, gpW, gaps.col);
         grid.style.setProperty('--tf-team-tl-cols', String(lay.cols));
         grid.style.setProperty('--tf-team-tl-rows', String(lay.rows));
+
+        var gc = lay.cols;
+        var gr = lay.rows;
+        var cellW = (gpW - gaps.col * Math.max(0, gc - 1)) / gc;
+        var cellH = (gpH - gaps.row * Math.max(0, gr - 1)) / gr;
+        var REF_W = 108;
+        var REF_H = 124;
+        var sc = Math.min(cellW / REF_W, cellH / REF_H, 1.42);
+        if (!isFinite(sc) || sc <= 0) sc = 1;
+        sc = Math.max(0.44, Math.min(sc, 1.42));
+        grid.style.setProperty('--tf-team-tl-scale', sc.toFixed(3));
       }
 
       function teamProjectHasIncompleteTask(projTasks) {
@@ -6032,9 +6090,28 @@
           gridPanel.classList.add('tf-team-grid-panel--fit');
           grid.classList.add('tf-team-project-tl-grid--fit');
           var maxCols0 = teamStatusMaxColsForViewport();
-          var colPick0 = pickTeamStatusGridColumns(rows.length, maxCols0);
-          grid.style.setProperty('--tf-team-tl-cols', String(colPick0));
-          grid.style.setProperty('--tf-team-tl-rows', String(Math.ceil(rows.length / colPick0)));
+          var gpWEst =
+            gridPanel.clientWidth > 60
+              ? gridPanel.clientWidth
+              : teamStatusSections && teamStatusSections.clientWidth > 60
+                ? teamStatusSections.clientWidth - 24
+                : Math.max(280, (typeof window !== 'undefined' ? window.innerWidth : 400) - 40);
+          var gpHEst =
+            teamStatusSections && teamStatusSections.clientHeight > 100
+              ? Math.max(96, teamStatusSections.clientHeight * 0.52 - 20)
+              : Math.max(120, (typeof window !== 'undefined' ? window.innerHeight : 600) * 0.34);
+          var gapEst = 10.5;
+          var lay0 = pickTeamStatusGridLayoutFitting(rows.length, maxCols0, gpWEst, gapEst);
+          grid.style.setProperty('--tf-team-tl-cols', String(lay0.cols));
+          grid.style.setProperty('--tf-team-tl-rows', String(lay0.rows));
+          var gc0 = lay0.cols;
+          var gr0 = lay0.rows;
+          var cellW0 = (gpWEst - gapEst * Math.max(0, gc0 - 1)) / gc0;
+          var cellH0 = (gpHEst - gapEst * Math.max(0, gr0 - 1)) / gr0;
+          var sc0 = Math.min(cellW0 / 108, cellH0 / 124, 1.42);
+          if (!isFinite(sc0) || sc0 <= 0) sc0 = 1;
+          sc0 = Math.max(0.44, Math.min(sc0, 1.42));
+          grid.style.setProperty('--tf-team-tl-scale', sc0.toFixed(3));
           for (hi = 0; hi < rows.length; hi++) {
             var row = rows[hi];
             var card = document.createElement('li');
@@ -6072,6 +6149,7 @@
             var pmsg = document.createElement('p');
             pmsg.className = 'tf-team-tl-msg';
             pmsg.textContent = row.msg;
+            pmsg.setAttribute('title', row.msg);
 
             body.appendChild(orb);
             body.appendChild(pmsg);
