@@ -2404,9 +2404,105 @@
       border-color: color-mix(in srgb, var(--tf-border-strong) 50%, var(--tf-accent) 100%);
       background: color-mix(in srgb, var(--tf-card) 70%, var(--tf-accent-soft) 100%);
     }
+    #pb-login-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      padding-left: max(1rem, env(safe-area-inset-left, 0px));
+      padding-right: max(1rem, env(safe-area-inset-right, 0px));
+      padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+      background: color-mix(in srgb, var(--tf-page-bg, #0f1419) 88%, transparent);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    #pb-login-overlay.hidden {
+      display: none;
+    }
+    #pb-login-card {
+      width: 100%;
+      max-width: 22rem;
+      border-radius: 1rem;
+      border: 1px solid var(--tf-border-strong);
+      background: var(--tf-card);
+      padding: 1.5rem;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+    }
+    #pb-login-error:not(:empty) {
+      margin-top: 0.75rem;
+      font-size: 0.875rem;
+      color: #f87171;
+    }
   </style>
 </head>
 <body class="min-h-screen font-sans antialiased">
+  <div
+    id="pb-login-overlay"
+    class="tf-modal-host"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="pb-login-title"
+  >
+    <div id="pb-login-card">
+      <h2 id="pb-login-title" class="font-display text-lg font-semibold mb-1" style="color: var(--tf-page-text);">
+        PocketBase にログイン
+      </h2>
+      <p class="text-sm mb-4" style="color: var(--tf-page-muted);">
+        メールとパスワードはこのページに保存されません（ブラウザの PocketBase セッションのみ）。
+      </p>
+      <form id="pb-login-form" class="space-y-3" autocomplete="on">
+        <div>
+          <label for="pb-login-email" class="block text-xs font-medium mb-1" style="color: var(--tf-muted);">メール</label>
+          <input
+            id="pb-login-email"
+            name="email"
+            type="email"
+            required
+            class="tf-input w-full rounded-lg border px-3 py-2 text-sm"
+            style="border-color: var(--tf-border-strong); background: color-mix(in srgb, var(--tf-card) 85%, #000); color: var(--tf-text);"
+            autocomplete="username"
+          />
+        </div>
+        <div>
+          <label for="pb-login-password" class="block text-xs font-medium mb-1" style="color: var(--tf-muted);">パスワード</label>
+          <input
+            id="pb-login-password"
+            name="password"
+            type="password"
+            required
+            class="tf-input w-full rounded-lg border px-3 py-2 text-sm"
+            style="border-color: var(--tf-border-strong); background: color-mix(in srgb, var(--tf-card) 85%, #000); color: var(--tf-text);"
+            autocomplete="current-password"
+          />
+        </div>
+        <div>
+          <label for="pb-login-server" class="block text-xs font-medium mb-1" style="color: var(--tf-muted);">
+            PocketBase の URL（任意）
+          </label>
+          <input
+            id="pb-login-server"
+            name="server"
+            type="url"
+            class="tf-input w-full rounded-lg border px-3 py-2 text-sm"
+            style="border-color: var(--tf-border-strong); background: color-mix(in srgb, var(--tf-card) 85%, #000); color: var(--tf-text);"
+            placeholder="空欄＝このページと同じホスト"
+          />
+        </div>
+        <p id="pb-login-error" class="text-sm" role="alert" aria-live="polite"></p>
+        <button
+          type="submit"
+          id="pb-login-submit"
+          class="w-full rounded-lg py-2.5 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2"
+          style="background: var(--tf-accent); color: var(--tf-accent-text); --tw-ring-color: var(--tf-ring); --tw-ring-offset-color: var(--tf-card);"
+        >
+          ログインして続行
+        </button>
+      </form>
+    </div>
+  </div>
   <div
     id="member-access-picker"
     class="tf-member-access-picker fixed inset-0 hidden flex items-center justify-center p-4"
@@ -2951,15 +3047,9 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.23.0/dist/pocketbase.umd.js"></script>
-  <!-- PocketBase ログイン（専用ユーザー）：次の <script> 内の 2 つの文字列を、管理画面で作ったメールとパスワードに書き換えてください -->
-  <script>
-    window.TF_PB_EMAIL = 'todolist@local.invalid';
-    window.TF_PB_PASSWORD = '54siDgRDgCBZ5FU';
-  </script>
-  <!-- GitHub Pages 等から PocketBase に繋ぐとき: Quick Tunnel のベース URL（再起動で変わる場合は更新） -->
-  <script>
-    window.TF_PB_BASE_URL = 'https://tips-ethics-cambridge-pump.trycloudflare.com';
-  </script>
+  <!-- 認証情報は HTML に書かない。ログインフォームで入力する。 -->
+  <!-- GitHub Pages 等で PocketBase が別ホストのときだけ、次の 1 行のコメントを外してベース URL を設定（例: trycloudflare） -->
+  <!-- <script>window.TF_PB_BASE_URL = 'https://あなたのトンネル.trycloudflare.com';</script> -->
   <script>
     (function () {
       var MS_DAY = 86400000;
@@ -3644,23 +3734,85 @@
         schedulePushToPocketBase();
       }
 
-      /** STEP D–F: PocketBase 同期（同一オリジンの PocketBase を想定。上書きは window.TF_PB_* で） */
-      var TF_PB_BASE_URL =
-        typeof window.TF_PB_BASE_URL === 'string' && window.TF_PB_BASE_URL
-          ? window.TF_PB_BASE_URL
-          : typeof window.location !== 'undefined'
-            ? window.location.origin
-            : 'http://127.0.0.1:8090';
+      /** STEP D–F: PocketBase 同期（API ベース URL は resolvePbBaseUrl。未設定ならページと同じオリジン） */
       var TF_PB_RECORD_ID =
         typeof window.TF_PB_RECORD_ID === 'string' ? window.TF_PB_RECORD_ID : '';
-      var TF_PB_EMAIL =
-        typeof window.TF_PB_EMAIL === 'string'
-          ? window.TF_PB_EMAIL
-          : 'teamflow@local.invalid';
-      var TF_PB_PASSWORD =
-        typeof window.TF_PB_PASSWORD === 'string'
-          ? window.TF_PB_PASSWORD
-          : 'TeamFlow-local-dev-2026-ChangeMe';
+
+      function resolvePbBaseUrl(override) {
+        var o = override != null ? String(override).trim() : '';
+        if (o) return o.replace(/\/$/, '');
+        if (typeof window.TF_PB_BASE_URL === 'string' && window.TF_PB_BASE_URL.trim())
+          return window.TF_PB_BASE_URL.trim().replace(/\/$/, '');
+        try {
+          var stored = localStorage.getItem('tf_pb_base_url_hint');
+          if (stored && String(stored).trim()) return String(stored).trim().replace(/\/$/, '');
+        } catch (eHint) {}
+        if (typeof window.location !== 'undefined' && window.location.origin) return window.location.origin;
+        return 'http://127.0.0.1:8090';
+      }
+
+      function finalizePbSync(pb) {
+        return (TF_PB_RECORD_ID
+          ? Promise.resolve(TF_PB_RECORD_ID)
+          : pb.collection('teamflow_sync').getList(1, 1).then(function (res) {
+              if (!res || !res.items || !res.items.length)
+                throw new Error('teamflow_sync にレコードがありません');
+              return res.items[0].id;
+            })
+        )
+          .then(function (rid) {
+            tfPbInstance = pb;
+            tfPbRecordId = rid;
+            return pb.collection('teamflow_sync').getOne(rid);
+          })
+          .then(function (rec) {
+            var p = rec && rec.payload;
+            var appliedFromPayload = false;
+            if (!tfPayloadLooksEmpty(p)) {
+              applyTeamflowPayload(p);
+              appliedFromPayload = true;
+            }
+            startTeamflowRealtimeSubscription();
+            return appliedFromPayload;
+          });
+      }
+
+      function initPocketBaseSync(email, password, baseUrlOverride) {
+        return new Promise(function (resolve, reject) {
+          if (typeof PocketBase === 'undefined') {
+            reject(
+              new Error('PocketBase SDK が読み込めていません。ネットワークを確認してください。')
+            );
+            return;
+          }
+          var base = resolvePbBaseUrl(baseUrlOverride);
+          var pb = new PocketBase(base);
+          pb
+            .collection('users')
+            .authWithPassword(String(email).trim(), password)
+            .then(function () {
+              return finalizePbSync(pb);
+            })
+            .then(resolve)
+            .catch(reject);
+        });
+      }
+
+      function tryResumePocketBaseSession(baseUrlOverride) {
+        return new Promise(function (resolve, reject) {
+          if (typeof PocketBase === 'undefined') {
+            reject();
+            return;
+          }
+          var base = resolvePbBaseUrl(baseUrlOverride);
+          var pb = new PocketBase(base);
+          if (!pb.authStore || !pb.authStore.isValid) {
+            reject();
+            return;
+          }
+          finalizePbSync(pb).then(resolve).catch(reject);
+        });
+      }
 
       var tfPbInstance = null;
       var tfPbRecordId = null;
@@ -3762,48 +3914,6 @@
             if (tfPbInstance && tfPbRecordId)
               tfPbInstance.collection('teamflow_sync').unsubscribe(tfPbRecordId);
           } catch (eUnload) {}
-        });
-      }
-
-      function initPocketBaseSync() {
-        return new Promise(function (resolve) {
-          if (typeof PocketBase === 'undefined') {
-            resolve(false);
-            return;
-          }
-          var pb = new PocketBase(TF_PB_BASE_URL);
-          pb.collection('users')
-            .authWithPassword(TF_PB_EMAIL, TF_PB_PASSWORD)
-            .then(function () {
-              if (TF_PB_RECORD_ID) return Promise.resolve(TF_PB_RECORD_ID);
-              return pb.collection('teamflow_sync').getList(1, 1).then(function (res) {
-                if (!res || !res.items || !res.items.length)
-                  throw new Error('teamflow_sync にレコードがありません');
-                return res.items[0].id;
-              });
-            })
-            .then(function (rid) {
-              tfPbInstance = pb;
-              tfPbRecordId = rid;
-              return pb.collection('teamflow_sync').getOne(rid);
-            })
-            .then(function (rec) {
-              var p = rec && rec.payload;
-              var appliedFromPayload = false;
-              if (!tfPayloadLooksEmpty(p)) {
-                applyTeamflowPayload(p);
-                appliedFromPayload = true;
-              }
-              startTeamflowRealtimeSubscription();
-              resolve(appliedFromPayload);
-            })
-            .catch(function (e) {
-              if (typeof console !== 'undefined' && console.warn)
-                console.warn('TeamFlow PocketBase init:', e);
-              tfPbInstance = null;
-              tfPbRecordId = null;
-              resolve(false);
-            });
         });
       }
 
@@ -7891,7 +8001,7 @@
         });
       }
 
-      initPocketBaseSync().then(function (appliedFromServer) {
+      function startMainApp(appliedFromServer) {
         loadAccessTeamMembersFromStorage();
         mergeMemberRosterFromStorage();
 
@@ -8004,7 +8114,69 @@
         })();
 
         render();
-      });
+      }
+
+      function hidePbLogin() {
+        var el = document.getElementById('pb-login-overlay');
+        if (el) el.classList.add('hidden');
+      }
+
+      function showPbLoginError(msg) {
+        var err = document.getElementById('pb-login-error');
+        if (!err) return;
+        err.textContent = msg ? String(msg) : '';
+      }
+
+      var pbLoginForm = document.getElementById('pb-login-form');
+      if (pbLoginForm) {
+        pbLoginForm.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          showPbLoginError('');
+          var emailIn = document.getElementById('pb-login-email');
+          var passIn = document.getElementById('pb-login-password');
+          var srvIn = document.getElementById('pb-login-server');
+          var email = emailIn ? emailIn.value : '';
+          var pass = passIn ? passIn.value : '';
+          var srv = srvIn && srvIn.value ? srvIn.value.trim() : '';
+          if (!String(email).trim() || !pass) {
+            showPbLoginError('メールアドレスとパスワードを入力してください。');
+            return;
+          }
+          initPocketBaseSync(email, pass, srv)
+            .then(function (appliedFromServer) {
+              try {
+                localStorage.setItem('tf_pb_login_email_hint', String(email).trim());
+                localStorage.setItem('tf_pb_base_url_hint', resolvePbBaseUrl(srv));
+              } catch (eLs) {}
+              hidePbLogin();
+              startMainApp(appliedFromServer);
+            })
+            .catch(function (e) {
+              if (typeof console !== 'undefined' && console.warn) console.warn('TeamFlow login:', e);
+              var m =
+                e && e.message
+                  ? String(e.message)
+                  : 'ログインに失敗しました。URL・メール・パスワードを確認してください。';
+              showPbLoginError(m);
+            });
+        });
+      }
+
+      try {
+        var hint = localStorage.getItem('tf_pb_login_email_hint');
+        var emEl = document.getElementById('pb-login-email');
+        if (hint && emEl) emEl.value = hint;
+        var urlHint = localStorage.getItem('tf_pb_base_url_hint');
+        var srvEl = document.getElementById('pb-login-server');
+        if (urlHint && srvEl && !srvEl.value) srvEl.value = urlHint;
+      } catch (eHint) {}
+
+      tryResumePocketBaseSession('')
+        .then(function (appliedFromServer) {
+          hidePbLogin();
+          startMainApp(appliedFromServer);
+        })
+        .catch(function () {});
     })();
   </script>
 </body>
