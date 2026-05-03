@@ -2001,6 +2001,9 @@
     .tf-team-activity-item--note {
       border-left-color: var(--tf-muted);
     }
+    .tf-team-activity-item--delete {
+      border-left-color: #f87171;
+    }
 
     /* チーム状況: 信号機カード + 更新ログ（1画面俯瞰・JS で高さ確定） */
     .tf-team-dashboard {
@@ -3162,17 +3165,6 @@
         return new Date(t.getFullYear(), t.getMonth(), t.getDate());
       }
 
-      /** 直前の平日（土日をスキップ。祝日は未考慮） */
-      function previousBusinessDay(fromDay) {
-        var d = new Date(fromDay.getFullYear(), fromDay.getMonth(), fromDay.getDate());
-        d.setDate(d.getDate() - 1);
-        while (d.getDay() === 0 || d.getDay() === 6) {
-          d.setDate(d.getDate() - 1);
-        }
-        return d;
-      }
-
-      function formatJpCalendarDate(d) {
         var wk = ['日', '月', '火', '水', '木', '金', '土'];
         return (
           d.getFullYear() +
@@ -3225,76 +3217,281 @@
       ];
       /*__TF_EMBED_END:teamTasks__*/
 
-      /** チーム状況：前営業日の活動サマリ */
-      var TEAM_YESTERDAY_DIGEST = [
-        {
-          member: '山田 太郎',
-          items: [
-            {
-              kind: 'progress',
-              taskTitle: '優先チケット3件の原因調査と返信ドラフト作成',
-              text: '進捗率を更新（10% → 35%）',
-            },
-            { kind: 'add', project: 'CS対応', text: '新たなタスクを2件追加' },
-            {
-              kind: 'due',
-              taskTitle: '回帰テスト観点リストの洗い出し',
-              text: '期限の延長を実施',
-            },
-          ],
-        },
-        {
-          member: '佐藤 花子',
-          items: [
-            {
-              kind: 'progress',
-              taskTitle: 'プッシュ通知の許可フロー文言とA/B案の整理',
-              text: 'レビュー用メモと A/B 案の表を追記',
-            },
-            { kind: 'note', text: 'デザインチャンネルで文言案を共有' },
-          ],
-        },
-        {
-          member: '鈴木 一郎',
-          items: [
-            {
-              kind: 'progress',
-              taskTitle: '権限モデル図の更新とFAQ追記',
-              text: '図を v3 に更新し、FAQ に権限移行時の注意を追加',
-            },
-          ],
-        },
-        {
-          member: '高橋 健',
-          items: [
-            {
-              kind: 'progress',
-              taskTitle: 'グラフコンポーネントのパフォーマンス計測',
-              text: '初回計測シートへ数値を転記',
-            },
-          ],
-        },
-        {
-          member: '中村 あゆみ',
-          items: [
-            {
-              kind: 'due',
-              taskTitle: 'コンテナイメージのスキャン結果トリアージ',
-              text: '優先度ラベルと担当メモを更新',
-            },
-          ],
-        },
-        {
-          member: '吉田 修平',
-          items: [
-            {
-              kind: 'progress',
-              taskTitle: 'E2Eテストのフレーク調査（優先度高）',
-              text: '再現手順を1件クローズ、残りを調査中に更新',
-            },
-          ],
-        },
-      ];
+      /** チームタスクの日次スナップショット（localStorage）。各暦日の「初回表示時点」をその日の基準として比較に使用。 */
+      var STORAGE_TEAMTASKS_SNAPSHOTS = 'teamflow-teamtasks-daily-snapshots-v1';
+
+      function pad2ForSnapshot(n) {
+        var x = Number(n) || 0;
+        return x < 10 ? '0' + x : String(x);
+      }
+
+      function formatYMDFromDate(d) {
+        return d.getFullYear() + '-' + pad2ForSnapshot(d.getMonth() + 1) + '-' + pad2ForSnapshot(d.getDate());
+      }
+
+      function addCalendarDaysFromDate(d, n) {
+        var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        x.setDate(x.getDate() + n);
+        return x;
+      }
+
+      function ymdToSlashForLog(ymd) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || '').trim());
+        if (!m) return String(ymd || '');
+        return m[1] + '/' + m[2] + '/' + m[3];
+      }
+
+      function normalizeEndStrForLog(s) {
+        return String(s || '').trim();
+      }
+
+      function endDisplaySlashForLog(s) {
+        var t = normalizeEndStrForLog(s);
+        if (!t) return '（未設定）';
+        return ymdToSlashForLog(t);
+      }
+
+      function snapshotTaskForLog(t) {
+        return {
+          id: String(t.id || ''),
+          project: String(t.project || '').trim(),
+          title: String(t.title || '').trim(),
+          progress:
+            typeof t.progress === 'number' && !isNaN(t.progress) ? Math.round(t.progress) : 0,
+          start: String(t.start || '').trim(),
+          end: normalizeEndStrForLog(t.end),
+          assignee: String(t.assignee || '').trim(),
+        };
+      }
+
+      function getTeamTasksSnapshotsStore() {
+        try {
+          var raw = localStorage.getItem(STORAGE_TEAMTASKS_SNAPSHOTS);
+          if (!raw) return {};
+          var o = JSON.parse(raw);
+          return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+        } catch (e) {
+          return {};
+        }
+      }
+
+      function setTeamTasksSnapshotsStore(obj) {
+        try {
+          localStorage.setItem(STORAGE_TEAMTASKS_SNAPSHOTS, JSON.stringify(obj));
+        } catch (e) {}
+      }
+
+      function pruneTeamTaskSnapshots(store, today, keepDays) {
+        var cutoff = addCalendarDaysFromDate(today, -keepDays);
+        var cy = formatYMDFromDate(cutoff);
+        var keys = Object.keys(store);
+        var i;
+        for (i = 0; i < keys.length; i++) {
+          if (keys[i] < cy) delete store[keys[i]];
+        }
+      }
+
+      function ensureTeamTasksDailySnapshot(today) {
+        var ymd = formatYMDFromDate(today);
+        try {
+          var store = getTeamTasksSnapshotsStore();
+          if (!store[ymd]) {
+            store[ymd] = teamTasks.map(snapshotTaskForLog);
+            pruneTeamTaskSnapshots(store, today, 50);
+            setTeamTasksSnapshotsStore(store);
+          }
+        } catch (e) {}
+      }
+
+      /** 火〜金: 前日 vs 当日（暦）。月曜: 3日前 vs 2日前。土日: 前日 vs 当日。 */
+      function getTeamLogSnapshotRange(today) {
+        var dow = today.getDay();
+        var startD;
+        var endD;
+        if (dow === 1) {
+          startD = addCalendarDaysFromDate(today, -3);
+          endD = addCalendarDaysFromDate(today, -2);
+        } else {
+          startD = addCalendarDaysFromDate(today, -1);
+          endD = today;
+        }
+        return {
+          startYmd: formatYMDFromDate(startD),
+          endYmd: formatYMDFromDate(endD),
+          startD: startD,
+          endD: endD,
+        };
+      }
+
+      function assigneeDigestKey(name) {
+        var s = String(name || '').trim();
+        return s || '（未割当）';
+      }
+
+      function digestItemKindOrder(kind) {
+        if (kind === 'add') return 0;
+        if (kind === 'progress') return 1;
+        if (kind === 'due') return 2;
+        if (kind === 'delete') return 3;
+        return 4;
+      }
+
+      function diffTeamTaskSnapshotsForDigest(beforeArr, afterArr) {
+        var before = {};
+        var after = {};
+        var i;
+        var id;
+        for (i = 0; i < beforeArr.length; i++) {
+          if (beforeArr[i].id) before[beforeArr[i].id] = beforeArr[i];
+        }
+        for (i = 0; i < afterArr.length; i++) {
+          if (afterArr[i].id) after[afterArr[i].id] = afterArr[i];
+        }
+        var byMember = {};
+
+        function pushLine(memRaw, kind, text) {
+          var mk = assigneeDigestKey(memRaw);
+          if (!byMember[mk]) byMember[mk] = [];
+          byMember[mk].push({ kind: kind, fullLine: true, text: text });
+        }
+
+        var addBuckets = {};
+        for (id in after) {
+          if (!Object.prototype.hasOwnProperty.call(after, id)) continue;
+          if (before[id]) continue;
+          var nt = after[id];
+          var mk = assigneeDigestKey(nt.assignee);
+          var pj = (nt.project || '').trim() || '（プロジェクト未設定）';
+          var bk = mk + '\x01' + pj;
+          addBuckets[bk] = (addBuckets[bk] || 0) + 1;
+        }
+        for (var bk in addBuckets) {
+          var segs = bk.split('\x01');
+          var memK = segs[0];
+          var projName = segs[1];
+          pushLine(
+            memK,
+            'add',
+            'プロジェクト「' + projName + '」についてタスクを' + addBuckets[bk] + '件追加'
+          );
+        }
+
+        for (id in before) {
+          if (!Object.prototype.hasOwnProperty.call(before, id)) continue;
+          if (after[id]) continue;
+          var bt = before[id];
+          var ttl = (bt.title || '').trim() || '（無題）';
+          pushLine(bt.assignee, 'delete', 'タスク「' + ttl + '」について削除を実施');
+        }
+
+        for (id in after) {
+          if (!Object.prototype.hasOwnProperty.call(after, id)) continue;
+          if (!before[id]) continue;
+          var b = before[id];
+          var a = after[id];
+          var titleForDisplay = ((a.title || '').trim() || (b.title || '').trim() || '（無題）').trim();
+          if (Number(b.progress) !== Number(a.progress)) {
+            pushLine(
+              a.assignee,
+              'progress',
+              'タスク「' +
+                titleForDisplay +
+                '」について進捗率を' +
+                b.progress +
+                '％から' +
+                a.progress +
+                '％へ変更'
+            );
+          }
+          var bend = normalizeEndStrForLog(b.end);
+          var aend = normalizeEndStrForLog(a.end);
+          if (bend !== aend) {
+            pushLine(
+              a.assignee,
+              'due',
+              'タスク「' +
+                titleForDisplay +
+                '」について終了日を' +
+                endDisplaySlashForLog(bend) +
+                'から' +
+                endDisplaySlashForLog(aend) +
+                'へ変更'
+            );
+          }
+        }
+
+        var members = Object.keys(byMember);
+        members.sort(function (a, b) {
+          return a.localeCompare(b, 'ja');
+        });
+        var rows = [];
+        for (i = 0; i < members.length; i++) {
+          var mm = members[i];
+          var items = byMember[mm];
+          items.sort(function (x, y) {
+            var o = digestItemKindOrder(x.kind) - digestItemKindOrder(y.kind);
+            if (o !== 0) return o;
+            return (x.text || '').localeCompare(y.text || '', 'ja');
+          });
+          rows.push({ member: mm, items: items });
+        }
+        return rows;
+      }
+
+      function buildTeamYesterdayDigestRows(today) {
+        var range = getTeamLogSnapshotRange(today);
+        var startYmd = range.startYmd;
+        var endYmd = range.endYmd;
+        var startD = range.startD;
+        var endD = range.endD;
+        var logSubText =
+          '比較: ' + formatJpCalendarDate(startD) + ' 〜 ' + formatJpCalendarDate(endD);
+        var store = getTeamTasksSnapshotsStore();
+        var beforeArr = store[startYmd];
+        var afterArr = store[endYmd];
+        var missing = !Array.isArray(beforeArr) || !Array.isArray(afterArr);
+        if (missing) {
+          return {
+            rows: [
+              {
+                member: 'スナップショット',
+                items: [
+                  {
+                    kind: 'note',
+                    fullLine: true,
+                    text:
+                      '比較に必要な日次記録がありません。' +
+                      startYmd +
+                      ' と ' +
+                      endYmd +
+                      ' のそれぞれの日に、少なくとも1回アプリを開いてください（各暦日の初回表示時のチームタスクを保存します）。',
+                  },
+                ],
+              },
+            ],
+            logSubText: logSubText,
+          };
+        }
+        var diffRows = diffTeamTaskSnapshotsForDigest(beforeArr, afterArr);
+        if (diffRows.length === 0) {
+          return {
+            rows: [
+              {
+                member: '（差分なし）',
+                items: [
+                  {
+                    kind: 'note',
+                    fullLine: true,
+                    text: '該当期間にチームタスクの追加・削除・進捗率・終了日の変更は検出されませんでした。',
+                  },
+                ],
+              },
+            ],
+            logSubText: logSubText,
+          };
+        }
+        return { rows: diffRows, logSubText: logSubText };
+      }
 
       function buildRegisteredTeamMembersList() {
         var seen = {};
@@ -5757,18 +5954,19 @@
       function renderTeamStatusView(today) {
         if (!teamStatusSections) return;
         teamStatusSections.innerHTML = '';
-        var prevDay = previousBusinessDay(today);
-        var dateStr = formatJpCalendarDate(prevDay);
+        var digestPack = buildTeamYesterdayDigestRows(today);
 
         function activityClassForKind(kind) {
           if (kind === 'progress') return 'tf-team-activity-item tf-team-activity-item--progress';
           if (kind === 'add') return 'tf-team-activity-item tf-team-activity-item--project';
           if (kind === 'due') return 'tf-team-activity-item tf-team-activity-item--due';
           if (kind === 'done') return 'tf-team-activity-item tf-team-activity-item--done';
+          if (kind === 'delete') return 'tf-team-activity-item tf-team-activity-item--delete';
           return 'tf-team-activity-item tf-team-activity-item--note';
         }
 
         function formatActivityLine(it) {
+          if (it.fullLine && it.text) return it.text;
           if (it.kind === 'progress' && it.taskTitle) {
             return 'タスク「' + it.taskTitle + '」について ' + it.text;
           }
@@ -5886,7 +6084,7 @@
 
         var logPanel = document.createElement('aside');
         logPanel.className = 'tf-team-log-panel';
-        logPanel.setAttribute('aria-label', '前営業日の更新ログ');
+        logPanel.setAttribute('aria-label', 'チームタスクの期間別更新ログ');
 
         var logHead = document.createElement('div');
         logHead.className = 'tf-team-log-panel__header';
@@ -5896,16 +6094,18 @@
         logTitle.textContent = '更新ログ（前営業日）';
         var logSub = document.createElement('p');
         logSub.className = 'tf-team-log-panel__sub';
-        logSub.textContent = '参照日: ' + dateStr;
+        logSub.textContent =
+          digestPack.logSubText + ' ※各暦日の初回表示時点を、その日の基準として比較します';
         logHead.appendChild(logTitle);
         logHead.appendChild(logSub);
 
         var logScroll = document.createElement('div');
         logScroll.className = 'tf-team-log-panel__scroll';
 
+        var digestRows = digestPack.rows || [];
         var mi, digestRow, actCard, who, av, nm, ulA, qi, it, li, div, memberName;
-        for (mi = 0; mi < TEAM_YESTERDAY_DIGEST.length; mi++) {
-          digestRow = TEAM_YESTERDAY_DIGEST[mi];
+        for (mi = 0; mi < digestRows.length; mi++) {
+          digestRow = digestRows[mi];
           actCard = document.createElement('article');
           actCard.className = 'tf-team-log-member';
           who = document.createElement('div');
@@ -6095,6 +6295,7 @@
 
       function render() {
         var today = todayStart();
+        ensureTeamTasksDailySnapshot(today);
         var counts = bucketCounts(today);
         document.getElementById('count-upcoming').textContent = '(' + counts.upcoming + ')';
         document.getElementById('count-active').textContent = '(' + counts.active + ')';
