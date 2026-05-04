@@ -2030,6 +2030,36 @@
         flex-shrink: 0;
         max-height: min(38vh, 13.5rem);
       }
+      /*
+       * チーム状況: 横幅1023px以下（実機スマホ〜タブレット縦）は信号機グリッドをパネル内スクロール。
+       * min-width:1024px（PC相当）では JS の固定高＋overflow:hidden で一画面俯瞰のまま。
+       */
+      .tf-team-dashboard--viewport-fit {
+        max-height: none !important;
+        height: auto !important;
+        min-height: 0;
+      }
+      .tf-team-grid-panel--fit {
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: min(58dvh, 28rem);
+        padding: 2px 2px 12px;
+      }
+      .tf-team-project-tl-grid--fit {
+        height: auto !important;
+        min-height: min-content;
+        grid-template-rows: repeat(var(--tf-team-tl-rows), auto) !important;
+        align-content: start;
+      }
+      .tf-team-project-tl-grid--fit .tf-team-tl-card {
+        height: auto !important;
+        min-height: 8.5rem;
+      }
     }
     .tf-team-grid-panel {
       flex: 1;
@@ -2045,37 +2075,6 @@
       min-height: 0;
       overflow: hidden;
       padding: 2px;
-    }
-    /**
-     * スマホ幅未満の極狭ビュー: 1画面に無理に収めずパネル内スクロール。
-     * PC（横幅十分）は .tf-team-dashboard--viewport-fit の JS 固定高＋非スクロールのまま。
-     */
-    @media (max-width: 389px) {
-      .tf-team-dashboard--viewport-fit {
-        max-height: none !important;
-        height: auto !important;
-        min-height: 0;
-      }
-      .tf-team-grid-panel--fit {
-        overflow-x: hidden;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-        overscroll-behavior: contain;
-        flex: 1 1 auto;
-        min-height: 12rem;
-        max-height: min(82dvh, 36rem);
-        padding: 2px 2px 10px;
-      }
-      .tf-team-project-tl-grid--fit {
-        height: auto;
-        min-height: min-content;
-        grid-template-rows: repeat(var(--tf-team-tl-rows), auto);
-        align-content: start;
-      }
-      .tf-team-project-tl-grid--fit .tf-team-tl-card {
-        height: auto;
-        min-height: 6.75rem;
-      }
     }
     .tf-team-log-panel {
       flex-shrink: 0;
@@ -5700,7 +5699,7 @@
         if (!n) return;
         var compact =
           typeof window.matchMedia === 'function' &&
-          window.matchMedia('(max-width: 389px)').matches;
+          window.matchMedia('(max-width: 1023px)').matches;
         var rootRect = root.getBoundingClientRect();
         var marginBottom = window.innerWidth >= 1024 ? 28 : 36;
         var budget = window.innerHeight - rootRect.top - marginBottom;
@@ -6214,7 +6213,7 @@
           var cellH0 = (gpHEst - gapEst * Math.max(0, gr0 - 1)) / gr0;
           var compact0 =
             typeof window.matchMedia === 'function' &&
-            window.matchMedia('(max-width: 389px)').matches;
+            window.matchMedia('(max-width: 1023px)').matches;
           var sc0;
           if (compact0) {
             sc0 = Math.min(cellW0 / 108, 1.22);
