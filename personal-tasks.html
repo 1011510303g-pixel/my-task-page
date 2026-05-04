@@ -2213,13 +2213,15 @@
       border-color: #dc2626;
     }
     .tf-team-tl-card__head {
-      padding: 0.5rem 0.65rem;
-      min-height: 44px;
+      position: relative;
+      z-index: 2;
+      padding: 0.35rem 0.55rem;
+      min-height: 2.25rem;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 0.8125rem;
-      font-weight: 800;
+      font-weight: 700;
       line-height: 1.35;
       color: #fff;
       text-align: center;
@@ -2231,7 +2233,10 @@
       margin: 0;
       border: none;
       cursor: pointer;
-      font: inherit;
+      font-family: inherit;
+      font-size: inherit;
+      line-height: inherit;
+      font-weight: 700;
       text-align: center;
       white-space: normal;
       transition: filter 0.15s ease, transform 0.12s ease;
@@ -2261,21 +2266,23 @@
       background: linear-gradient(180deg, #f87171, #b91c1c);
     }
     .tf-team-tl-card__body {
+      position: relative;
+      z-index: 0;
       flex: 1;
       min-height: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 0.35rem;
-      padding: 0.45rem 0.35rem 0.55rem;
+      gap: 0.5rem;
+      padding: 0.5rem 0.4rem 0.5rem;
       background: var(--tf-card);
       overflow: hidden;
     }
     .tf-team-project-tl-grid--fit .tf-team-tl-card__body {
-      gap: calc(0.3rem * var(--tf-team-tl-scale, 1));
-      padding: calc(0.28rem * var(--tf-team-tl-scale, 1)) calc(0.3rem * var(--tf-team-tl-scale, 1))
-        calc(0.36rem * var(--tf-team-tl-scale, 1));
+      gap: calc(0.35rem * var(--tf-team-tl-scale, 1));
+      padding: calc(0.4rem * var(--tf-team-tl-scale, 1)) calc(0.32rem * var(--tf-team-tl-scale, 1))
+        calc(0.38rem * var(--tf-team-tl-scale, 1));
     }
     /* 信号: 正円のランプ（縦横比固定・楕円にならない） */
     .tf-team-tl-sphere {
@@ -2309,18 +2316,44 @@
       aspect-ratio: 1 / 1;
       width: clamp(
         calc(1.35rem * var(--tf-team-tl-scale, 1)),
-        calc(2.5rem * var(--tf-team-tl-scale, 1)),
-        calc(3.1rem * var(--tf-team-tl-scale, 1))
+        calc(2.35rem * var(--tf-team-tl-scale, 1)),
+        calc(2.8rem * var(--tf-team-tl-scale, 1))
       );
       height: auto;
       min-width: calc(1.35rem * var(--tf-team-tl-scale, 1));
-      max-width: min(100%, 3.5rem);
+      max-width: min(100%, 3rem);
       flex-shrink: 0;
     }
     .tf-team-project-tl-grid--fit button.tf-team-tl-card__head {
       font-size: calc(0.8125rem * var(--tf-team-tl-scale, 1));
-      min-height: calc(2.65rem * var(--tf-team-tl-scale, 1));
-      padding: calc(0.42rem * var(--tf-team-tl-scale, 1)) calc(0.5rem * var(--tf-team-tl-scale, 1));
+      min-height: calc(2.05rem * var(--tf-team-tl-scale, 1));
+      padding: calc(0.3rem * var(--tf-team-tl-scale, 1)) calc(0.45rem * var(--tf-team-tl-scale, 1));
+    }
+    /* 横長セルかつ本文が収まるときのみ JS が付与（信号機の右にステータス） */
+    .tf-team-tl-card__body.tf-team-tl-card__body--status-inline {
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 0.55rem;
+      padding: 0.4rem 0.45rem 0.45rem;
+    }
+    .tf-team-tl-card__body.tf-team-tl-card__body--status-inline .tf-team-tl-sphere {
+      align-self: center;
+    }
+    .tf-team-tl-card__body.tf-team-tl-card__body--status-inline .tf-team-tl-msg {
+      text-align: start;
+      align-self: center;
+      flex: 1 1 0;
+      min-width: 0;
+      min-height: 0;
+      max-height: none;
+      display: block;
+      -webkit-line-clamp: unset;
+      line-clamp: unset;
+      -webkit-box-orient: unset;
+      overflow: hidden;
+      word-break: break-word;
     }
     .tf-team-tl-msg {
       margin: 0;
@@ -2332,7 +2365,7 @@
       padding: 0 0.15rem;
       flex-shrink: 0;
       align-self: stretch;
-      min-height: calc(0.8125rem * 1.45 * 2);
+      min-height: 1.45em;
       max-height: calc(0.8125rem * 1.45 * 3);
       display: -webkit-box;
       -webkit-box-orient: vertical;
@@ -2343,7 +2376,7 @@
     }
     .tf-team-project-tl-grid--fit .tf-team-tl-msg {
       font-size: calc(0.8125rem * var(--tf-team-tl-scale, 1));
-      min-height: calc(0.8125rem * var(--tf-team-tl-scale, 1) * 1.45 * 2);
+      min-height: calc(1.45em * var(--tf-team-tl-scale, 1));
       max-height: calc(0.8125rem * var(--tf-team-tl-scale, 1) * 1.45 * 3);
     }
 
@@ -5688,6 +5721,32 @@
         return { cols: fb, rows: Math.ceil(n / fb) };
       }
 
+      /**
+       * 信号機カードが横長かつ本文に収まるときだけ、ステータス文言をランプの右側に並べる。
+       */
+      function updateTeamTlCardStatusInlineLayouts() {
+        var grid = teamStatusRoot && teamStatusRoot.querySelector('.tf-team-project-tl-grid--fit');
+        if (!grid) return;
+        var cards = grid.querySelectorAll(':scope > li.tf-team-tl-card');
+        var minCardW = 188;
+        var i;
+        for (i = 0; i < cards.length; i++) {
+          var card = cards[i];
+          var body = card.querySelector('.tf-team-tl-card__body');
+          if (!body) continue;
+          body.classList.remove('tf-team-tl-card__body--status-inline');
+          var cw = card.clientWidth;
+          if (!cw || cw < minCardW) continue;
+          body.classList.add('tf-team-tl-card__body--status-inline');
+          void body.offsetHeight;
+          var overY = body.scrollHeight > body.clientHeight + 2;
+          var overX = body.scrollWidth > body.clientWidth + 2;
+          if (overY || overX) {
+            body.classList.remove('tf-team-tl-card__body--status-inline');
+          }
+        }
+      }
+
       function fitTeamStatusDashboardLayout() {
         var root = teamStatusRoot;
         if (!root || root.classList.contains('hidden')) return;
@@ -5714,8 +5773,14 @@
 
         var gpW = gridPanel.clientWidth;
         var gpH = gridPanel.clientHeight;
-        if (gpW < 48) return;
-        if (!compact && gpH < 48) return;
+        if (gpW < 48) {
+          updateTeamTlCardStatusInlineLayouts();
+          return;
+        }
+        if (!compact && gpH < 48) {
+          updateTeamTlCardStatusInlineLayouts();
+          return;
+        }
 
         var gapStr = window.getComputedStyle(grid).gap;
         var gaps = parseCssGridGapsPx(gapStr);
@@ -5742,6 +5807,7 @@
           sc = Math.max(0.44, Math.min(sc, 1.42));
         }
         grid.style.setProperty('--tf-team-tl-scale', sc.toFixed(3));
+        updateTeamTlCardStatusInlineLayouts();
       }
 
       function teamProjectHasIncompleteTask(projTasks) {
@@ -6168,9 +6234,9 @@
           }
           tier = overdueN > 0 ? 'overdue' : behindN > 0 ? 'behind' : 'ontrack';
           if (tier === 'overdue') {
-            msg = overdueN === 1 ? '1件のタスクが期限を超過しています' : overdueN + '件のタスクが期限を超過しています';
+            msg = '期限超過：' + overdueN + '件';
           } else if (tier === 'behind') {
-            msg = behindN === 1 ? '1件のタスクが遅れ気味です' : behindN + '件のタスクが遅れ気味です';
+            msg = '遅れ気味：' + behindN + '件';
           } else {
             msg = '順調です';
           }
