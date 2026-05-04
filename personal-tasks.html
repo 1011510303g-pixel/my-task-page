@@ -5524,6 +5524,13 @@
         return false;
       }
 
+      function projectHasCompleteTask(projTasks) {
+        for (var j = 0; j < projTasks.length; j++) {
+          if (projTasks[j].progress >= 100) return true;
+        }
+        return false;
+      }
+
       function appendInProgressProjectBlock(parent, pname, projTasks, today, idSuffix) {
         var block = document.createElement('section');
         block.className =
@@ -5542,12 +5549,16 @@
         h2.textContent = pname;
         block.appendChild(h2);
 
-        var up = projTasks.filter(function (t) {
+        var openTasks = projTasks.filter(function (t) {
+          return Number(t.progress) < 100;
+        });
+
+        var up = openTasks.filter(function (t) {
           return taskBucket(t, today) === 'upcoming';
         });
         if (up.length) appendFlatTaskSubsection(block, '今後', up, today, 'startAsc', PROJECT_CARD_OPTS);
 
-        var act = projTasks.filter(function (t) {
+        var act = openTasks.filter(function (t) {
           return taskBucket(t, today) === 'active';
         });
         var actWrap = document.createElement('div');
@@ -5568,11 +5579,6 @@
           appendProjectActiveTaskList(actWrap, act, today, PROJECT_CARD_OPTS);
         }
         block.appendChild(actWrap);
-
-        var dn = projTasks.filter(function (t) {
-          return taskBucket(t, today) === 'done';
-        });
-        if (dn.length) appendFlatTaskSubsection(block, '完了', dn, today, 'endDesc', PROJECT_CARD_OPTS);
 
         parent.appendChild(block);
       }
@@ -5595,13 +5601,20 @@
         h2.textContent = pname;
         block.appendChild(h2);
 
+        var doneTasks = projTasks.filter(function (t) {
+          return Number(t.progress) >= 100;
+        });
+        var hasOpen = projectHasIncompleteTask(projTasks);
+
         var note = document.createElement('p');
         note.className = 'text-xs sm:text-sm mb-2';
         note.style.color = 'var(--tf-page-muted)';
-        note.textContent = 'すべてのタスクが進捗100%です（クローズ）。';
+        note.textContent = hasOpen
+          ? '進捗100%のタスクです。未完了のタスクは「進捗中」タブに表示されます。'
+          : 'すべてのタスクが進捗100%です（クローズ）。';
         block.appendChild(note);
 
-        var sorted = projTasks.slice().sort(function (a, b) {
+        var sorted = doneTasks.slice().sort(function (a, b) {
           return sortKeyEndDescVal(b.end) - sortKeyEndDescVal(a.end);
         });
         appendFlatTaskSubsection(block, 'タスク', sorted, today, 'endDesc', PROJECT_CARD_OPTS);
@@ -5609,11 +5622,19 @@
         parent.appendChild(block);
       }
 
-      function countTasksInNamedProjects(nameList) {
+      /** マイタスク・プロジェクト一覧：シェルフごとに数えるタスク（進捗中＝100%未満、クローズ＝100%） */
+      function countTasksInNamedProjectsForMyShelf(nameList, shelf) {
         var total = 0;
-        for (var ni = 0; ni < nameList.length; ni++) {
-          for (var tj = 0; tj < tasks.length; tj++) {
-            if (tasks[tj].project === nameList[ni]) total++;
+        var ni, tj, pnm;
+        for (ni = 0; ni < nameList.length; ni++) {
+          pnm = (nameList[ni] || '').trim();
+          for (tj = 0; tj < tasks.length; tj++) {
+            if ((tasks[tj].project || '').trim() !== pnm) continue;
+            if (shelf === 'closed') {
+              if (tasks[tj].progress >= 100) total++;
+            } else {
+              if (tasks[tj].progress < 100) total++;
+            }
           }
         }
         return total;
@@ -6452,18 +6473,19 @@
         var closedNames = [];
         for (var pi = 0; pi < projects.length; pi++) {
           var pn = projects[pi];
+          var pKey = (pn || '').trim();
           var pt = tasks.filter(function (t) {
-            return t.project === pn;
+            return (t.project || '').trim() === pKey;
           });
           if (projectHasIncompleteTask(pt)) inProgNames.push(pn);
-          else closedNames.push(pn);
+          if (projectHasCompleteTask(pt)) closedNames.push(pn);
         }
 
         if (cInEl) cInEl.textContent = '(' + inProgNames.length + ')';
         if (cClEl) cClEl.textContent = '(' + closedNames.length + ')';
 
         var names = projectShelfTab === 'closed' ? closedNames : inProgNames;
-        var tasksInTab = countTasksInNamedProjects(names);
+        var tasksInTab = countTasksInNamedProjectsForMyShelf(names, projectShelfTab);
         countEl.textContent = String(names.length);
         if (countRestEl) {
           if (narrowProjectToolbarSummary()) {
