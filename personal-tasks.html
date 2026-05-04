@@ -4229,7 +4229,8 @@
           for (i = 0; i < p.teamTasks.length; i++) teamTasks.push(p.teamTasks[i]);
         }
         if (
-          p.teamProjectRegistry &&
+          Object.prototype.hasOwnProperty.call(p, 'teamProjectRegistry') &&
+          p.teamProjectRegistry !== null &&
           typeof p.teamProjectRegistry === 'object' &&
           !Array.isArray(p.teamProjectRegistry)
         ) {
@@ -7785,13 +7786,24 @@
         var pname = String(wbsOpenProjectName || '').trim();
         if (!pname) return;
         if (!window.confirm('プロジェクトを削除しますか')) return;
-        if (Object.prototype.hasOwnProperty.call(teamProjectRegistry, pname)) {
-          delete teamProjectRegistry[pname];
+        var regKeys = [];
+        var k;
+        for (k in teamProjectRegistry) {
+          if (!Object.prototype.hasOwnProperty.call(teamProjectRegistry, k)) continue;
+          if (String(k).trim() === pname) regKeys.push(k);
+        }
+        for (var ri = 0; ri < regKeys.length; ri++) {
+          delete teamProjectRegistry[regKeys[ri]];
         }
         var i;
         for (i = teamTasks.length - 1; i >= 0; i--) {
           if (String((teamTasks[i].project || '').trim()) === pname) {
             teamTasks.splice(i, 1);
+          }
+        }
+        for (var ej = TEAM_EMPTY_CLOSED_PROJECTS.length - 1; ej >= 0; ej--) {
+          if (String(TEAM_EMPTY_CLOSED_PROJECTS[ej] || '').trim() === pname) {
+            TEAM_EMPTY_CLOSED_PROJECTS.splice(ej, 1);
           }
         }
         saveTeamProjectRegistry();
