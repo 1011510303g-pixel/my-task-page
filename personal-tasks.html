@@ -2046,6 +2046,37 @@
       overflow: hidden;
       padding: 2px;
     }
+    /**
+     * スマホ幅未満の極狭ビュー: 1画面に無理に収めずパネル内スクロール。
+     * PC（横幅十分）は .tf-team-dashboard--viewport-fit の JS 固定高＋非スクロールのまま。
+     */
+    @media (max-width: 389px) {
+      .tf-team-dashboard--viewport-fit {
+        max-height: none !important;
+        height: auto !important;
+        min-height: 0;
+      }
+      .tf-team-grid-panel--fit {
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        flex: 1 1 auto;
+        min-height: 12rem;
+        max-height: min(82dvh, 36rem);
+        padding: 2px 2px 10px;
+      }
+      .tf-team-project-tl-grid--fit {
+        height: auto;
+        min-height: min-content;
+        grid-template-rows: repeat(var(--tf-team-tl-rows), auto);
+        align-content: start;
+      }
+      .tf-team-project-tl-grid--fit .tf-team-tl-card {
+        height: auto;
+        min-height: 6.75rem;
+      }
+    }
     .tf-team-log-panel {
       flex-shrink: 0;
       display: flex;
@@ -2247,23 +2278,27 @@
       padding: calc(0.28rem * var(--tf-team-tl-scale, 1)) calc(0.3rem * var(--tf-team-tl-scale, 1))
         calc(0.36rem * var(--tf-team-tl-scale, 1));
     }
+    /* 信号: 正円のランプ（縦横比固定・楕円にならない） */
     .tf-team-tl-sphere {
+      box-sizing: border-box;
+      aspect-ratio: 1 / 1;
       width: clamp(2rem, 26cqi, 3.35rem);
-      height: clamp(2rem, 26cqi, 3.35rem);
-      border-radius: 9999px;
+      height: auto;
+      max-width: 100%;
+      border-radius: 50%;
       flex-shrink: 0;
       min-width: 2rem;
-      min-height: 2rem;
-      box-shadow: inset 0 -10px 18px rgba(0, 0, 0, 0.18), inset 0 10px 14px rgba(255, 255, 255, 0.22);
+      border: 2px solid color-mix(in srgb, var(--tf-page-text) 18%, transparent);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
     }
     .tf-team-tl-sphere--green {
-      background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.45), transparent 38%), #22c55e;
+      background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.35), transparent 42%), #22c55e;
     }
     .tf-team-tl-sphere--yellow {
-      background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.5), transparent 38%), #eab308;
+      background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.4), transparent 42%), #eab308;
     }
     .tf-team-tl-sphere--red {
-      background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.42), transparent 38%), #ef4444;
+      background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.32), transparent 42%), #ef4444;
     }
     @supports not (width: 1cqi) {
       .tf-team-tl-sphere {
@@ -2272,19 +2307,16 @@
       }
     }
     .tf-team-project-tl-grid--fit .tf-team-tl-sphere {
+      aspect-ratio: 1 / 1;
       width: clamp(
         calc(1.35rem * var(--tf-team-tl-scale, 1)),
         calc(2.5rem * var(--tf-team-tl-scale, 1)),
         calc(3.1rem * var(--tf-team-tl-scale, 1))
       );
-      height: clamp(
-        calc(1.35rem * var(--tf-team-tl-scale, 1)),
-        calc(2.5rem * var(--tf-team-tl-scale, 1)),
-        calc(3.1rem * var(--tf-team-tl-scale, 1))
-      );
+      height: auto;
       min-width: calc(1.35rem * var(--tf-team-tl-scale, 1));
-      min-height: calc(1.35rem * var(--tf-team-tl-scale, 1));
-      flex-shrink: 1;
+      max-width: min(100%, 3.5rem);
+      flex-shrink: 0;
     }
     .tf-team-project-tl-grid--fit button.tf-team-tl-card__head {
       font-size: calc(0.8125rem * var(--tf-team-tl-scale, 1));
@@ -5666,16 +5698,25 @@
         if (!wrap || !gridPanel || !grid) return;
         var n = grid.querySelectorAll(':scope > li.tf-team-tl-card').length;
         if (!n) return;
+        var compact =
+          typeof window.matchMedia === 'function' &&
+          window.matchMedia('(max-width: 389px)').matches;
         var rootRect = root.getBoundingClientRect();
         var marginBottom = window.innerWidth >= 1024 ? 28 : 36;
         var budget = window.innerHeight - rootRect.top - marginBottom;
         budget = Math.max(220, Math.min(budget, window.innerHeight * 0.95));
-        wrap.style.height = budget + 'px';
-        wrap.style.maxHeight = budget + 'px';
+        if (compact) {
+          wrap.style.height = '';
+          wrap.style.maxHeight = '';
+        } else {
+          wrap.style.height = budget + 'px';
+          wrap.style.maxHeight = budget + 'px';
+        }
 
         var gpW = gridPanel.clientWidth;
         var gpH = gridPanel.clientHeight;
-        if (gpW < 48 || gpH < 48) return;
+        if (gpW < 48) return;
+        if (!compact && gpH < 48) return;
 
         var gapStr = window.getComputedStyle(grid).gap;
         var gaps = parseCssGridGapsPx(gapStr);
@@ -5688,12 +5729,19 @@
         var gc = lay.cols;
         var gr = lay.rows;
         var cellW = (gpW - gaps.col * Math.max(0, gc - 1)) / gc;
-        var cellH = (gpH - gaps.row * Math.max(0, gr - 1)) / gr;
         var REF_W = 108;
         var REF_H = 124;
-        var sc = Math.min(cellW / REF_W, cellH / REF_H, 1.42);
-        if (!isFinite(sc) || sc <= 0) sc = 1;
-        sc = Math.max(0.44, Math.min(sc, 1.42));
+        var sc;
+        if (compact) {
+          sc = Math.min(cellW / REF_W, 1.22);
+          if (!isFinite(sc) || sc <= 0) sc = 1;
+          sc = Math.max(0.52, Math.min(sc, 1.35));
+        } else {
+          var cellH = (gpH - gaps.row * Math.max(0, gr - 1)) / gr;
+          sc = Math.min(cellW / REF_W, cellH / REF_H, 1.42);
+          if (!isFinite(sc) || sc <= 0) sc = 1;
+          sc = Math.max(0.44, Math.min(sc, 1.42));
+        }
         grid.style.setProperty('--tf-team-tl-scale', sc.toFixed(3));
       }
 
@@ -6164,9 +6212,19 @@
           var gr0 = lay0.rows;
           var cellW0 = (gpWEst - gapEst * Math.max(0, gc0 - 1)) / gc0;
           var cellH0 = (gpHEst - gapEst * Math.max(0, gr0 - 1)) / gr0;
-          var sc0 = Math.min(cellW0 / 108, cellH0 / 124, 1.42);
-          if (!isFinite(sc0) || sc0 <= 0) sc0 = 1;
-          sc0 = Math.max(0.44, Math.min(sc0, 1.42));
+          var compact0 =
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(max-width: 389px)').matches;
+          var sc0;
+          if (compact0) {
+            sc0 = Math.min(cellW0 / 108, 1.22);
+            if (!isFinite(sc0) || sc0 <= 0) sc0 = 1;
+            sc0 = Math.max(0.52, Math.min(sc0, 1.35));
+          } else {
+            sc0 = Math.min(cellW0 / 108, cellH0 / 124, 1.42);
+            if (!isFinite(sc0) || sc0 <= 0) sc0 = 1;
+            sc0 = Math.max(0.44, Math.min(sc0, 1.42));
+          }
           grid.style.setProperty('--tf-team-tl-scale', sc0.toFixed(3));
           for (hi = 0; hi < rows.length; hi++) {
             var row = rows[hi];
