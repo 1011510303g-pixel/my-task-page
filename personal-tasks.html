@@ -2334,7 +2334,7 @@
       flex-direction: row;
       flex-wrap: nowrap;
       align-items: center;
-      justify-content: flex-start;
+      justify-content: center;
       gap: 0.55rem;
       padding: 0.4rem 0.45rem 0.45rem;
     }
@@ -2342,11 +2342,12 @@
       align-self: center;
     }
     .tf-team-tl-card__body.tf-team-tl-card__body--status-inline .tf-team-tl-msg {
-      text-align: start;
+      text-align: center;
       align-self: center;
-      flex: 1 1 0;
+      flex: 0 1 auto;
       min-width: 0;
       min-height: 0;
+      max-width: calc(100% - 3.75rem);
       max-height: none;
       display: block;
       -webkit-line-clamp: unset;
@@ -2364,7 +2365,9 @@
       color: var(--tf-page-text);
       padding: 0 0.15rem;
       flex-shrink: 0;
-      align-self: stretch;
+      align-self: center;
+      width: auto;
+      max-width: 100%;
       min-height: 1.45em;
       max-height: calc(0.8125rem * 1.45 * 3);
       display: -webkit-box;
