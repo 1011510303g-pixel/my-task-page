@@ -2028,27 +2028,27 @@
     @media (max-width: 1023px) {
       .tf-team-dashboard--viewport-fit .tf-team-log-panel {
         flex-shrink: 0;
-        max-height: min(38vh, 13.5rem);
+        max-height: none;
+        min-height: 12rem !important;
       }
       /*
-       * チーム状況: 横幅1023px以下（実機スマホ〜タブレット縦）は信号機グリッドをパネル内スクロール。
-       * min-width:1024px（PC相当）では JS の固定高＋overflow:hidden で一画面俯瞰のまま。
+       * スマホ〜タブレット縦: パネル内スクロールはやめ、ページ全体をスクロール。
+       * 信号機＋ステータスがカード内で潰れないよう min-height を確保する。
+       * PC（1024px以上）は従来どおり JS の固定高＋グリッド内俯瞰。
        */
       .tf-team-dashboard--viewport-fit {
         max-height: none !important;
         height: auto !important;
         min-height: 0;
       }
-      .tf-team-grid-panel--fit {
+      .tf-team-dashboard--viewport-fit .tf-team-grid-panel--fit {
         overflow-x: hidden;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-        overscroll-behavior: contain;
-        touch-action: pan-y;
-        flex: 1 1 auto;
+        overflow-y: visible;
+        flex: 0 0 auto;
         min-height: 0;
-        max-height: min(58dvh, 28rem);
+        max-height: none;
         padding: 2px 2px 12px;
+        touch-action: auto;
       }
       .tf-team-project-tl-grid--fit {
         height: auto !important;
@@ -2056,9 +2056,24 @@
         grid-template-rows: repeat(var(--tf-team-tl-rows), auto) !important;
         align-content: start;
       }
+      .tf-team-project-tl-grid--fit > li {
+        align-items: stretch;
+      }
       .tf-team-project-tl-grid--fit .tf-team-tl-card {
+        flex: 0 1 auto !important;
         height: auto !important;
-        min-height: 8.5rem;
+        min-height: 9.5rem !important;
+      }
+      .tf-team-project-tl-grid--fit .tf-team-tl-card__body {
+        flex: 1 1 auto;
+        min-height: 5.25rem;
+        overflow: visible;
+      }
+      .tf-team-dashboard--viewport-fit .tf-team-log-panel__scroll {
+        flex: 0 0 auto;
+        min-height: 0;
+        max-height: none;
+        overflow: visible;
       }
     }
     .tf-team-grid-panel {
