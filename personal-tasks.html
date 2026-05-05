@@ -3796,11 +3796,11 @@
         var fromTasks = buildRegisteredTeamMembersList();
         var u = {};
         var i, n;
-        /** PocketBase で既に適用済みのレースタをシード（起動時にローカルだけで上書きしない） */
-        for (i = 0; i < TEAM_REGISTERED_MEMBERS.length; i++) {
-          n = String(TEAM_REGISTERED_MEMBERS[i] || '').trim();
-          if (n) u[n] = true;
-        }
+        /**
+         * 設定で確定した担当者一覧は ACCESS_TEAM_MEMBERS のみをソースにする。
+         * TEAM_REGISTERED_MEMBERS は merge 直前に古い内容のまま残り得る（変更・削除のたびに旧名が復活する不具合の原因だった）。
+         * localStorage のロスタも入力に使わない（persist 前の読み込みで削除が反映されない原因だった）。
+         */
         for (i = 0; i < ACCESS_TEAM_MEMBERS.length; i++) {
           n = String(ACCESS_TEAM_MEMBERS[i] || '').trim();
           if (n) u[n] = true;
@@ -3815,18 +3815,6 @@
             if (n) u[n] = true;
           }
         } catch (eEmb) {}
-        try {
-          var raw = localStorage.getItem(STORAGE_TEAM_MEMBERS_ROSTER);
-          if (raw) {
-            var arr = JSON.parse(raw);
-            if (Array.isArray(arr)) {
-              for (i = 0; i < arr.length; i++) {
-                n = String(arr[i] || '').trim();
-                if (n) u[n] = true;
-              }
-            }
-          }
-        } catch (eRoster) {}
         var keys = Object.keys(u);
         keys.sort(function (a, b) {
           return a.localeCompare(b, 'ja');
