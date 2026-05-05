@@ -3340,7 +3340,7 @@
       ];
       /*__TF_EMBED_END:teamTasks__*/
 
-      /** チームタスクの日次スナップショット（localStorage）。各暦日の「初回表示時点」をその日の基準として比較に使用。 */
+      /** チームタスクの日次スナップショット。localStorage に保持し、PocketBase payload.teamTasksDailySnapshots と双方向同期（更新ログを端末間で共有）。 */
       var STORAGE_TEAMTASKS_SNAPSHOTS = 'teamflow-teamtasks-daily-snapshots-v1';
 
       function pad2ForSnapshot(n) {
@@ -3404,6 +3404,30 @@
         } catch (e) {}
       }
 
+      /** PocketBase 経由で受け取った日次スナップショットをマージ（ローカルに無い日付のみ補完）。 */
+      function mergeTeamTasksDailySnapshotsFromPayload(remote) {
+        if (!remote || typeof remote !== 'object' || Array.isArray(remote)) return;
+        try {
+          var local = getTeamTasksSnapshotsStore();
+          var k;
+          var added = false;
+          for (k in remote) {
+            if (!Object.prototype.hasOwnProperty.call(remote, k)) continue;
+            if (!Array.isArray(remote[k])) continue;
+            if (!local[k]) {
+              local[k] = remote[k];
+              added = true;
+            }
+          }
+          if (added) {
+            try {
+              pruneTeamTaskSnapshots(local, new Date(), 50);
+            } catch (ePr) {}
+            setTeamTasksSnapshotsStore(local);
+          }
+        } catch (eM) {}
+      }
+
       function pruneTeamTaskSnapshots(store, today, keepDays) {
         var cutoff = addCalendarDaysFromDate(today, -keepDays);
         var cy = formatYMDFromDate(cutoff);
@@ -3422,6 +3446,7 @@
             store[ymd] = teamTasks.map(snapshotTaskForLog);
             pruneTeamTaskSnapshots(store, today, 50);
             setTeamTasksSnapshotsStore(store);
+            schedulePushToPocketBase();
           }
         } catch (e) {}
       }
@@ -4214,6 +4239,14 @@
           return false;
         if (Array.isArray(p.teamRegisteredMembers) && p.teamRegisteredMembers.length > 0)
           return false;
+        var snap = p.teamTasksDailySnapshots;
+        if (snap && typeof snap === 'object' && !Array.isArray(snap)) {
+          var sk = Object.keys(snap);
+          var si;
+          for (si = 0; si < sk.length; si++) {
+            if (Array.isArray(snap[sk[si]])) return false;
+          }
+        }
         return true;
       }
 
@@ -4240,6 +4273,13 @@
         if (Array.isArray(p.teamRegisteredMembers)) {
           TEAM_REGISTERED_MEMBERS = p.teamRegisteredMembers.slice();
         }
+        if (
+          Object.prototype.hasOwnProperty.call(p, 'teamTasksDailySnapshots') &&
+          p.teamTasksDailySnapshots !== null &&
+          typeof p.teamTasksDailySnapshots === 'object'
+        ) {
+          mergeTeamTasksDailySnapshotsFromPayload(p.teamTasksDailySnapshots);
+        }
       }
 
       function schedulePushToPocketBase() {
@@ -4252,6 +4292,7 @@
             teamTasks: teamTasks,
             teamProjectRegistry: teamProjectRegistry,
             teamRegisteredMembers: TEAM_REGISTERED_MEMBERS,
+            teamTasksDailySnapshots: getTeamTasksSnapshotsStore(),
           };
           tfPbSuppressRealtimeUntil = Date.now() + 900;
           tfPbInstance
