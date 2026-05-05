@@ -1598,6 +1598,15 @@
       display: flex;
     }
 
+    #edit-assignee-layer {
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    #edit-assignee-layer.edit-assignee-layer-visible {
+      display: flex;
+    }
+
     /* 削除確認中は本文を見えなくするが display:none にしない（パネル高さが潰れてオーバーレイも消えるのを防ぐ） */
     #edit-modal-body.edit-modal-body--confirm-suspended {
       visibility: hidden;
@@ -3110,14 +3119,23 @@
             <input type="date" id="ef-end" name="end" required class="tf-input tf-date-input w-full rounded-xl border px-3 py-3 text-sm outline-none" style="background: var(--tf-elevated); border-color: var(--tf-border-strong);" aria-invalid="false" aria-describedby="edit-date-error" />
           </div>
           <p id="edit-date-error" class="hidden text-sm tf-form-error" role="alert"></p>
-          <div class="pt-4 mt-1 border-t" style="border-color: var(--tf-border);">
+          <div class="pt-4 mt-1 border-t flex flex-col sm:flex-row flex-wrap gap-3" style="border-color: var(--tf-border);">
             <button type="button" id="edit-delete-task" class="w-full sm:w-auto rounded-xl border py-3 px-4 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2" style="border-color: color-mix(in srgb, #f87171 45%, var(--tf-border-strong)); color: #f87171; --tw-ring-color: var(--tf-ring); --tw-ring-offset-color: var(--tf-card); background: color-mix(in srgb, #f87171 8%, transparent);">タスク削除</button>
+            <button type="button" id="edit-change-assignee" class="hidden w-full sm:w-auto rounded-xl border py-3 px-4 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2" style="border-color: var(--tf-border-strong); color: var(--tf-accent-text); --tw-ring-color: var(--tf-ring); --tw-ring-offset-color: var(--tf-card); background: color-mix(in srgb, var(--tf-accent) 12%, transparent);">担当者変更</button>
           </div>
           <div class="flex flex-col-reverse sm:flex-row gap-3 pt-2">
             <button type="button" id="cancel-edit" class="tf-btn-ghost sm:flex-1 rounded-xl border py-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2" style="border-color: var(--tf-border-strong); color: var(--tf-muted); --tw-ring-color: var(--tf-ring); --tw-ring-offset-color: var(--tf-card);">キャンセル</button>
             <button type="submit" class="tf-btn-primary sm:flex-1 rounded-xl py-3 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2" style="--tw-ring-color: var(--tf-ring); --tw-ring-offset-color: var(--tf-card);">保存する</button>
           </div>
         </form>
+      </div>
+      <div id="edit-assignee-layer" class="absolute inset-0 z-10 p-6" style="background: rgba(0,0,0,0.45);" aria-hidden="true">
+        <div class="w-full max-w-sm rounded-xl border shadow-card p-6 sm:p-7 max-h-[min(78dvh,28rem)] flex flex-col" style="background: var(--tf-card); border-color: var(--tf-border-strong);" role="dialog" aria-modal="true" aria-labelledby="edit-assignee-title">
+          <p id="edit-assignee-title" class="text-base font-semibold mb-2 shrink-0" style="color: var(--tf-text);">担当者を選択</p>
+          <p id="edit-assignee-current" class="text-xs mb-4 shrink-0" style="color: var(--tf-muted);"></p>
+          <div id="edit-assignee-list" class="flex flex-col gap-2 overflow-y-auto flex-1 min-h-0 mb-4"></div>
+          <button type="button" id="edit-assignee-cancel" class="tf-btn-ghost shrink-0 w-full rounded-xl border py-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2" style="border-color: var(--tf-border-strong); color: var(--tf-muted); --tw-ring-color: var(--tf-ring); --tw-ring-offset-color: var(--tf-card);">閉じる</button>
+        </div>
       </div>
       <div id="edit-delete-confirm-layer" class="absolute inset-0 z-10 p-6" style="background: rgba(0,0,0,0.45);" aria-hidden="true">
         <div class="w-full max-w-sm rounded-xl border shadow-card p-6 sm:p-7" style="background: var(--tf-card); border-color: var(--tf-border-strong);" role="alertdialog" aria-modal="true" aria-labelledby="edit-delete-confirm-title">
@@ -4776,7 +4794,132 @@
       var efEnd = document.getElementById('ef-end');
       var editModalBody = document.getElementById('edit-modal-body');
       var editDeleteLayer = document.getElementById('edit-delete-confirm-layer');
+      var editAssigneeLayer = document.getElementById('edit-assignee-layer');
       var deleteConfirmOpen = false;
+      var assigneePickerOpen = false;
+
+      function syncEditModalBodyOverlayState() {
+        if (!editModalBody) return;
+        if (deleteConfirmOpen || assigneePickerOpen) {
+          editModalBody.classList.add('edit-modal-body--confirm-suspended');
+          editModalBody.setAttribute('aria-hidden', 'true');
+        } else {
+          editModalBody.classList.remove('edit-modal-body--confirm-suspended', 'hidden');
+          editModalBody.removeAttribute('aria-hidden');
+        }
+      }
+
+      function resetEditAssigneeLayer() {
+        assigneePickerOpen = false;
+        if (editAssigneeLayer) {
+          editAssigneeLayer.classList.remove('edit-assignee-layer-visible');
+          editAssigneeLayer.setAttribute('aria-hidden', 'true');
+        }
+        syncEditModalBodyOverlayState();
+      }
+
+      function resetEditDeleteConfirmLayer() {
+        deleteConfirmOpen = false;
+        if (editDeleteLayer) {
+          editDeleteLayer.classList.remove('edit-delete-confirm-visible');
+          editDeleteLayer.setAttribute('aria-hidden', 'true');
+        }
+        syncEditModalBodyOverlayState();
+      }
+
+      function populateEditAssigneeList(currentAssignee) {
+        var listEl = document.getElementById('edit-assignee-list');
+        var curEl = document.getElementById('edit-assignee-current');
+        if (curEl) {
+          var cur = String(currentAssignee || '').trim();
+          curEl.textContent = cur ? '現在の担当: ' + cur : '現在の担当: （未割当）';
+        }
+        if (!listEl) return;
+        listEl.innerHTML = '';
+        try {
+          mergeMemberRosterFromStorage();
+        } catch (eM) {}
+        var members = ACCESS_TEAM_MEMBERS.slice();
+        if (members.length === 0) {
+          var emptyP = document.createElement('p');
+          emptyP.className = 'text-sm m-0';
+          emptyP.style.color = 'var(--tf-muted)';
+          emptyP.textContent = '登録されている担当者がいません。設定からメンバーを登録してください。';
+          listEl.appendChild(emptyP);
+          return;
+        }
+        var ii;
+        for (ii = 0; ii < members.length; ii++) {
+          (function (nm) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className =
+              'w-full text-left rounded-xl border px-4 py-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2';
+            btn.setAttribute(
+              'style',
+              'border-color: var(--tf-border-strong); color: var(--tf-text); background: var(--tf-elevated); --tw-ring-color: var(--tf-ring); --tw-ring-offset-color: var(--tf-card);'
+            );
+            btn.textContent = nm;
+            if (String(currentAssignee || '').trim() === nm) {
+              btn.style.borderColor = 'var(--tf-accent)';
+              btn.style.boxShadow = '0 0 0 1px color-mix(in srgb, var(--tf-accent) 65%, transparent)';
+              btn.setAttribute('aria-current', 'true');
+            }
+            btn.addEventListener('click', function () {
+              applyEditAssigneeChoice(nm);
+            });
+            listEl.appendChild(btn);
+          })(members[ii]);
+        }
+      }
+
+      function closeEditAssigneePicker() {
+        resetEditAssigneeLayer();
+        var chBtn = document.getElementById('edit-change-assignee');
+        if (chBtn && typeof chBtn.focus === 'function') chBtn.focus();
+      }
+
+      function applyEditAssigneeChoice(memberName) {
+        var id = document.getElementById('ef-id').value;
+        var teamT = findTeamTask(id);
+        if (!teamT) {
+          closeEditAssigneePicker();
+          return;
+        }
+        var nm = String(memberName || '').trim();
+        if (!nm || ACCESS_TEAM_MEMBERS.indexOf(nm) < 0) return;
+        teamT.assignee = nm;
+        try {
+          syncPersonalTasksMirror();
+        } catch (eS) {}
+        resetEditAssigneeLayer();
+        render();
+        requestPersistPersonalHtml();
+        try {
+          showAppToast('担当者を「' + nm + '」に変更しました。');
+        } catch (eToast) {}
+        var chBtn2 = document.getElementById('edit-change-assignee');
+        if (chBtn2 && typeof chBtn2.focus === 'function') chBtn2.focus();
+      }
+
+      function openEditAssigneePicker() {
+        var id = document.getElementById('ef-id').value;
+        var teamT = findTeamTask(id);
+        if (!teamT) return;
+        resetEditDeleteConfirmLayer();
+        assigneePickerOpen = true;
+        populateEditAssigneeList(teamT.assignee);
+        if (editModalBody) {
+          editModalBody.classList.remove('hidden');
+        }
+        if (editAssigneeLayer) {
+          editAssigneeLayer.classList.add('edit-assignee-layer-visible');
+          editAssigneeLayer.setAttribute('aria-hidden', 'false');
+        }
+        syncEditModalBodyOverlayState();
+        var cancelBtn = document.getElementById('edit-assignee-cancel');
+        if (cancelBtn && typeof cancelBtn.focus === 'function') cancelBtn.focus();
+      }
 
       var completeTaskBackdrop = document.getElementById('complete-task-backdrop');
       var completeTaskModalWrap = document.getElementById('complete-task-confirm');
@@ -7246,18 +7389,6 @@
         return removedTasks || removedTeam;
       }
 
-      function resetEditDeleteConfirmLayer() {
-        deleteConfirmOpen = false;
-        if (editDeleteLayer) {
-          editDeleteLayer.classList.remove('edit-delete-confirm-visible');
-          editDeleteLayer.setAttribute('aria-hidden', 'true');
-        }
-        if (editModalBody) {
-          editModalBody.classList.remove('edit-modal-body--confirm-suspended', 'hidden');
-          editModalBody.removeAttribute('aria-hidden');
-        }
-      }
-
       function closeEditDeleteConfirm() {
         resetEditDeleteConfirmLayer();
         var delBtn = document.getElementById('edit-delete-task');
@@ -7267,16 +7398,16 @@
       function openEditDeleteConfirm() {
         var id = document.getElementById('ef-id').value;
         if (!findTask(id) && !findTeamTask(id)) return;
+        resetEditAssigneeLayer();
         deleteConfirmOpen = true;
         if (editModalBody) {
           editModalBody.classList.remove('hidden');
-          editModalBody.classList.add('edit-modal-body--confirm-suspended');
-          editModalBody.setAttribute('aria-hidden', 'true');
         }
         if (editDeleteLayer) {
           editDeleteLayer.classList.add('edit-delete-confirm-visible');
           editDeleteLayer.setAttribute('aria-hidden', 'false');
         }
+        syncEditModalBodyOverlayState();
         var noBtn = document.getElementById('edit-delete-no');
         if (noBtn && typeof noBtn.focus === 'function') noBtn.focus();
       }
@@ -7298,6 +7429,7 @@
         if (completeConfirmOpen) return;
         var task = findTask(taskId) || findTeamTask(taskId);
         if (!task) return;
+        resetEditAssigneeLayer();
         resetEditDeleteConfirmLayer();
         lastEditTrigger = triggerBtn || document.activeElement;
         lastFocusEl = document.activeElement;
@@ -7321,10 +7453,16 @@
         editPanel.classList.remove('opacity-0', 'translate-y-4', 'scale-95', 'pointer-events-none');
         document.getElementById('ef-progress').focus();
         installModalFocusTrap('edit');
+        var chBtn = document.getElementById('edit-change-assignee');
+        if (chBtn) {
+          if (findTeamTask(task.id)) chBtn.classList.remove('hidden');
+          else chBtn.classList.add('hidden');
+        }
       }
 
       function closeEditModal() {
         if (modalOpen !== 'edit') return;
+        resetEditAssigneeLayer();
         resetEditDeleteConfirmLayer();
         teardownModalFocusTrap();
         modalOpen = false;
@@ -7352,7 +7490,7 @@
       }
 
       function openCompleteTaskConfirm(taskId, triggerBtn) {
-        if (modalOpen || deleteConfirmOpen || completeConfirmOpen) return;
+        if (modalOpen || deleteConfirmOpen || assigneePickerOpen || completeConfirmOpen) return;
         pendingCompleteTaskId = taskId;
         lastCompleteFocusEl = triggerBtn || document.activeElement;
         completeConfirmOpen = true;
@@ -7426,7 +7564,7 @@
       }
 
       function openSettingsModal() {
-        if (deleteConfirmOpen || modalOpen || completeConfirmOpen) return;
+        if (deleteConfirmOpen || assigneePickerOpen || modalOpen || completeConfirmOpen) return;
         lastFocusEl = document.activeElement;
         mergeMemberRosterFromStorage();
         setSettingsMemberMessage('', false);
@@ -8230,7 +8368,7 @@
       }
 
       function openWbsModal(projectName) {
-        if (deleteConfirmOpen || completeConfirmOpen || modalOpen) return;
+        if (deleteConfirmOpen || assigneePickerOpen || completeConfirmOpen || modalOpen) return;
         lastFocusEl = document.activeElement;
         var pname = (projectName || '').trim();
         wbsOpenProjectName = pname;
@@ -8398,7 +8536,7 @@
       }
 
       function openTeamProjectAddTaskModal(projectName, triggerEl) {
-        if (deleteConfirmOpen || completeConfirmOpen || modalOpen) return;
+        if (deleteConfirmOpen || assigneePickerOpen || completeConfirmOpen || modalOpen) return;
         lastFocusEl = triggerEl || document.activeElement;
         var hid = document.getElementById('team-pa-project');
         if (hid) hid.value = String(projectName || '').trim();
@@ -8745,15 +8883,23 @@
       document.getElementById('close-edit-modal').addEventListener('click', closeEditModal);
       document.getElementById('cancel-edit').addEventListener('click', closeEditModal);
       editBackdrop.addEventListener('click', function () {
-        if (deleteConfirmOpen) closeEditDeleteConfirm();
+        if (assigneePickerOpen) closeEditAssigneePicker();
+        else if (deleteConfirmOpen) closeEditDeleteConfirm();
         else closeEditModal();
       });
       document.getElementById('edit-delete-task').addEventListener('click', openEditDeleteConfirm);
+      document.getElementById('edit-change-assignee').addEventListener('click', openEditAssigneePicker);
+      document.getElementById('edit-assignee-cancel').addEventListener('click', closeEditAssigneePicker);
       document.getElementById('edit-delete-no').addEventListener('click', closeEditDeleteConfirm);
       document.getElementById('edit-delete-yes').addEventListener('click', performEditDelete);
       if (editDeleteLayer) {
         editDeleteLayer.addEventListener('click', function (e) {
           if (e.target === editDeleteLayer) closeEditDeleteConfirm();
+        });
+      }
+      if (editAssigneeLayer) {
+        editAssigneeLayer.addEventListener('click', function (e) {
+          if (e.target === editAssigneeLayer) closeEditAssigneePicker();
         });
       }
 
@@ -8851,6 +8997,11 @@
           if (completeConfirmOpen) {
             e.preventDefault();
             closeCompleteTaskConfirm();
+            return;
+          }
+          if (modalOpen === 'edit' && assigneePickerOpen) {
+            e.preventDefault();
+            closeEditAssigneePicker();
             return;
           }
           if (modalOpen === 'edit' && deleteConfirmOpen) {
