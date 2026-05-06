@@ -1365,22 +1365,152 @@
       border-right: 1px solid var(--tf-border-strong);
     }
     .wbs-tl-body-split {
-      display: flex;
-      align-items: stretch;
-      width: 100%;
-      min-width: 0;
+      display: none;
     }
     .wbs-tl-left-stack {
-      flex: 0 0 var(--wbs-fixed-split);
-      min-width: 0;
+      display: none;
+    }
+    /* 1行ごとに左（sticky）＋タイムラインを並べ、行高を同期（単一横スクロール） */
+    .wbs-tl-scroll-stack--paired {
       display: flex;
       flex-direction: column;
-      border-right: 1px solid var(--tf-border-strong);
+      width: max-content;
+      min-width: 100%;
+      box-sizing: border-box;
+    }
+    .wbs-tl-pair {
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      width: 100%;
+      box-sizing: border-box;
+      border-bottom: 1px solid color-mix(in srgb, var(--tf-border) 85%, transparent);
+      min-width: calc(var(--wbs-fixed-split) + var(--wbs-time-total));
+    }
+    .wbs-tl-pair__sticky {
+      flex: 0 0 var(--wbs-fixed-split);
+      width: var(--wbs-fixed-split);
+      min-width: var(--wbs-fixed-split);
+      max-width: var(--wbs-fixed-split);
+      position: sticky;
+      left: 0;
+      z-index: 3;
+      box-sizing: border-box;
+      align-self: stretch;
       background: color-mix(in srgb, var(--tf-card) 96%, transparent);
+      border-right: 1px solid var(--tf-border-strong);
+      box-shadow: 4px 0 12px rgba(0, 0, 0, 0.06);
+    }
+    .wbs-tl-pair__timeline {
+      flex: 0 0 var(--wbs-time-total);
+      width: var(--wbs-time-total);
+      min-width: var(--wbs-time-total);
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: color-mix(in srgb, var(--tf-elevated) 38%, transparent);
+    }
+    .wbs-tl-pair .wbs-group-row {
+      grid-column: auto;
+      width: 100%;
+      box-sizing: border-box;
+      border-bottom: none;
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+    .wbs-tl-pair .wbs-tl-strip-spacer {
+      border-bottom: none;
+      width: 100%;
+    }
+    .wbs-tl-pair .wbs-year-strip--wide {
+      width: 100%;
+      box-sizing: border-box;
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+    .wbs-tl-pair .wbs-gantt-header {
+      flex: 1;
+      width: 100%;
+      min-height: 3rem;
+      border-bottom: none;
+    }
+    .wbs-tl-pair .wbs-group-row--scroll-band {
+      flex: 1;
+      width: 100%;
+      min-height: 0;
+      border-bottom: none;
+    }
+    .wbs-tl-pair .wbs-tl-task-left {
+      flex: 1;
+      width: 100%;
+      min-height: 0;
+      border-bottom: none;
+      display: flex;
+      align-items: stretch;
+    }
+    .wbs-tl-pair .wbs-tl-task-track-host {
+      flex: 1;
+      width: 100%;
+      min-width: 0;
+      min-height: 2.85rem;
+      display: flex;
+      flex-direction: column;
+      border-bottom: none;
+    }
+    .wbs-tl-pair-track-in {
+      flex: 1;
+      width: 100%;
+      min-height: 2.85rem;
+      position: relative;
+      box-sizing: border-box;
+    }
+    .wbs-tl-pair-track-in > .wbs-track {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      min-height: 2.85rem;
+      box-sizing: border-box;
+      flex: none;
+      grid-column: auto;
+    }
+    .wbs-tl-hdr-fix.wbs-tl-hdr-corner-visual {
+      position: relative;
+      overflow: hidden;
+    }
+    .wbs-tl-hdr-fix.wbs-tl-hdr-corner-visual::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        to bottom left,
+        transparent calc(50% - 0.55px),
+        color-mix(in srgb, var(--tf-border-strong) 65%, transparent) 50%,
+        transparent calc(50% + 0.55px)
+      );
+      pointer-events: none;
+      z-index: 1;
+    }
+    .wbs-tl-hdr-fix.wbs-tl-hdr-corner-visual .wbs-hcell--corner {
+      position: relative;
+      z-index: 2;
+    }
+    .wbs-tl-hdr-fix.wbs-tl-hdr-corner-visual .wbs-hcell--corner:first-child {
+      justify-content: flex-end;
+      align-items: flex-start;
+      padding-bottom: 0.35rem;
+    }
+    .wbs-tl-hdr-fix.wbs-tl-hdr-corner-visual .wbs-hcell--corner:last-child {
+      justify-content: flex-start;
+      align-items: flex-end;
+      padding-top: 0.35rem;
     }
     .wbs-tl-single-scroll {
       flex: 1;
       min-width: 0;
+      width: 100%;
       overflow-x: auto;
       overflow-y: hidden;
       -webkit-overflow-scrolling: touch;
@@ -8065,8 +8195,6 @@
           rowFix,
           trackIn,
           hdrFix,
-          bodySplit,
-          leftStack,
           stripSpacer,
           scrollWrap,
           scrollInner,
@@ -8074,8 +8202,7 @@
           trackHost,
           gBand,
           bmPx,
-          lastTaskLeft,
-          lastTrackHost,
+          lastPair,
           sMs,
           eMs,
           leftPct,
@@ -8206,53 +8333,57 @@
           root.className = 'wbs-gantt wbs-gantt--timeline-scroll';
           root.style.setProperty('--wbs-time-total', timeTotalPx + 'px');
 
-          var bodySplit = document.createElement('div');
-          bodySplit.className = 'wbs-tl-body-split';
-
-          var leftStack = document.createElement('div');
-          leftStack.className = 'wbs-tl-left-stack';
-
-          var stripSpacer = document.createElement('div');
-          stripSpacer.className = 'wbs-tl-strip-spacer';
-          stripSpacer.setAttribute('aria-hidden', 'true');
-          leftStack.appendChild(stripSpacer);
-
-          hdrFix = document.createElement('div');
-          hdrFix.className = 'wbs-header-split-fixed wbs-tl-hdr-fix';
-          hTask = document.createElement('div');
-          hTask.className = 'wbs-hcell wbs-hcell--corner';
-          hTask.textContent = 'タスク';
-          hOwner = document.createElement('div');
-          hOwner.className = 'wbs-hcell wbs-hcell--corner';
-          hOwner.textContent = '担当';
-          hdrFix.appendChild(hTask);
-          hdrFix.appendChild(hOwner);
-          leftStack.appendChild(hdrFix);
-
-          var scrollWrap = document.createElement('div');
+          scrollWrap = document.createElement('div');
           scrollWrap.className = 'wbs-tl-single-scroll';
           scrollWrap.setAttribute(
             'aria-label',
             'プロジェクト期間のタイムライン。左右にスクロールして全体を表示できます。'
           );
 
-          var scrollInner = document.createElement('div');
-          scrollInner.className = 'wbs-tl-scroll-stack';
-          scrollInner.style.width = timeTotalPx + 'px';
-          scrollInner.style.minWidth = timeTotalPx + 'px';
+          scrollInner = document.createElement('div');
+          scrollInner.className = 'wbs-tl-scroll-stack wbs-tl-scroll-stack--paired';
           scrollInner.style.boxSizing = 'border-box';
+
+          function appendTimelinePair(leftEl, rightEl) {
+            var pair = document.createElement('div');
+            pair.className = 'wbs-tl-pair';
+            var sticky = document.createElement('div');
+            sticky.className = 'wbs-tl-pair__sticky';
+            sticky.appendChild(leftEl);
+            var tl = document.createElement('div');
+            tl.className = 'wbs-tl-pair__timeline';
+            tl.appendChild(rightEl);
+            pair.appendChild(sticky);
+            pair.appendChild(tl);
+            scrollInner.appendChild(pair);
+            return pair;
+          }
+
+          stripSpacer = document.createElement('div');
+          stripSpacer.className = 'wbs-tl-strip-spacer';
+          stripSpacer.setAttribute('aria-hidden', 'true');
 
           strip = document.createElement('div');
           strip.className = 'wbs-year-strip--wide';
           strip.textContent = stripTitle;
-          scrollInner.appendChild(strip);
+          appendTimelinePair(stripSpacer, strip);
+
+          hdrFix = document.createElement('div');
+          hdrFix.className =
+            'wbs-header-split-fixed wbs-tl-hdr-fix wbs-tl-hdr-corner-visual';
+          hTask = document.createElement('div');
+          hTask.className = 'wbs-hcell wbs-hcell--corner';
+          hTask.textContent = 'タスク';
+          hOwner = document.createElement('div');
+          hOwner.className = 'wbs-hcell wbs-hcell--corner';
+          hOwner.textContent = 'スケジュール';
+          hdrFix.appendChild(hTask);
+          hdrFix.appendChild(hOwner);
 
           hdr = document.createElement('div');
           hdr.className = 'wbs-gantt-header wbs-tl-hdr-grid';
           hdr.style.display = 'grid';
           hdr.style.gridTemplateColumns = 'repeat(' + nSeg + ', ' + colPx + 'px)';
-          hdr.style.width = timeTotalPx + 'px';
-          hdr.style.minWidth = timeTotalPx + 'px';
           hdr.style.boxSizing = 'border-box';
           for (j = 0; j < nSeg; j++) {
             hc = document.createElement('div');
@@ -8268,11 +8399,9 @@
             hc.appendChild(sub);
             hdr.appendChild(hc);
           }
-          scrollInner.appendChild(hdr);
+          appendTimelinePair(hdrFix, hdr);
 
-          var lastTaskLeft = null;
-          var lastTrackHost = null;
-
+          lastPair = null;
           wbsIdx = 0;
           for (k = 0; k < keys.length; k++) {
             asg = keys[k];
@@ -8292,19 +8421,17 @@
             gCnt.style.color = 'var(--tf-faint)';
             gCnt.textContent = '（' + list.length + ' 件）';
             gRow.appendChild(gCnt);
-            leftStack.appendChild(gRow);
 
-            var gBand = document.createElement('div');
+            gBand = document.createElement('div');
             gBand.className = 'wbs-group-row--scroll-band';
-            gBand.style.width = timeTotalPx + 'px';
             gBand.setAttribute('aria-hidden', 'true');
-            scrollInner.appendChild(gBand);
+            appendTimelinePair(gRow, gBand);
 
             for (j = 0; j < list.length; j++) {
               tk = list[j];
               wbsIdx++;
 
-              var taskLeftWrap = document.createElement('div');
+              taskLeftWrap = document.createElement('div');
               taskLeftWrap.className = 'wbs-tl-task-left';
 
               rowFix = document.createElement('div');
@@ -8332,19 +8459,12 @@
               oc.appendChild(chip);
               rowFix.appendChild(oc);
               taskLeftWrap.appendChild(rowFix);
-              leftStack.appendChild(taskLeftWrap);
 
-              var trackHost = document.createElement('div');
+              trackHost = document.createElement('div');
               trackHost.className = 'wbs-tl-task-track-host';
-              trackHost.style.width = timeTotalPx + 'px';
-              trackHost.style.minWidth = timeTotalPx + 'px';
 
               trackIn = document.createElement('div');
-              trackIn.style.width = timeTotalPx + 'px';
-              trackIn.style.minWidth = timeTotalPx + 'px';
-              trackIn.style.position = 'relative';
-              trackIn.style.minHeight = '2.85rem';
-              trackIn.style.boxSizing = 'border-box';
+              trackIn.className = 'wbs-tl-pair-track-in';
 
               track = document.createElement('div');
               track.className = 'wbs-track wbs-track--split wbs-track--striped-cols';
@@ -8386,20 +8506,14 @@
               }
               trackIn.appendChild(track);
               trackHost.appendChild(trackIn);
-              scrollInner.appendChild(trackHost);
-
-              lastTaskLeft = taskLeftWrap;
-              lastTrackHost = trackHost;
+              lastPair = appendTimelinePair(taskLeftWrap, trackHost);
             }
           }
 
-          if (lastTaskLeft) lastTaskLeft.classList.add('wbs-tl-last-row');
-          if (lastTrackHost) lastTrackHost.classList.add('wbs-tl-last-row');
+          if (lastPair) lastPair.classList.add('wbs-tl-last-row');
 
           scrollWrap.appendChild(scrollInner);
-          bodySplit.appendChild(leftStack);
-          bodySplit.appendChild(scrollWrap);
-          root.appendChild(bodySplit);
+          root.appendChild(scrollWrap);
 
           return root;
         }
@@ -8437,7 +8551,7 @@
 
         hOwner = document.createElement('div');
         hOwner.className = 'wbs-hcell wbs-hcell--corner';
-        hOwner.textContent = '担当';
+        hOwner.textContent = 'スケジュール';
         hdr.appendChild(hOwner);
 
         for (j = 0; j < nSeg; j++) {
