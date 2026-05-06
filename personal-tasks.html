@@ -1332,6 +1332,16 @@
       min-width: 0;
       min-height: 2.85rem;
     }
+    /* 月グリッド線を DOM の空セル大量生成の代わりに背景で描画（スクロールモード） */
+    .wbs-track--striped-cols {
+      background-image: repeating-linear-gradient(
+        90deg,
+        transparent 0,
+        transparent calc(var(--wbs-time-col) - 1px),
+        color-mix(in srgb, var(--tf-border) 55%, transparent) calc(var(--wbs-time-col) - 1px),
+        color-mix(in srgb, var(--tf-border) 55%, transparent) var(--wbs-time-col)
+      );
+    }
     /* 3ヶ月以上: タイムラインのみ横スクロール、タスク・担当は固定幅（月列は 200px 固定） */
     .wbs-gantt--timeline-scroll {
       --wbs-fixed-split: clamp(15rem, 38vw, 28rem);
@@ -1354,7 +1364,21 @@
       background: color-mix(in srgb, var(--tf-elevated) 88%, #000 10%);
       border-right: 1px solid var(--tf-border-strong);
     }
-    .wbs-js-sync-scroll {
+    .wbs-tl-body-split {
+      display: flex;
+      align-items: stretch;
+      width: 100%;
+      min-width: 0;
+    }
+    .wbs-tl-left-stack {
+      flex: 0 0 var(--wbs-fixed-split);
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--tf-border-strong);
+      background: color-mix(in srgb, var(--tf-card) 96%, transparent);
+    }
+    .wbs-tl-single-scroll {
       flex: 1;
       min-width: 0;
       overflow-x: auto;
@@ -1362,6 +1386,47 @@
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-x: contain;
       touch-action: pan-x;
+    }
+    .wbs-tl-scroll-stack {
+      box-sizing: border-box;
+    }
+    .wbs-tl-strip-spacer {
+      min-height: 2.1rem;
+      box-sizing: border-box;
+      border-bottom: 1px solid var(--tf-border-strong);
+      background: color-mix(in srgb, var(--tf-elevated) 88%, #000 12%);
+    }
+    .wbs-tl-hdr-fix {
+      border-bottom: 1px solid var(--tf-border-strong);
+      background: color-mix(in srgb, var(--tf-accent-soft) 22%, var(--tf-elevated));
+      min-height: 3rem;
+    }
+    .wbs-tl-hdr-grid {
+      border-bottom: 1px solid var(--tf-border-strong);
+      min-height: 3rem;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .wbs-group-row--scroll-band {
+      border-bottom: 1px solid var(--tf-border-strong);
+      background: color-mix(in srgb, var(--tf-elevated) 75%, transparent);
+      min-height: 2.35rem;
+      box-sizing: border-box;
+    }
+    .wbs-tl-task-left {
+      border-bottom: 1px solid color-mix(in srgb, var(--tf-border) 85%, transparent);
+      min-height: 2.85rem;
+      display: flex;
+      align-items: stretch;
+      box-sizing: border-box;
+    }
+    .wbs-tl-task-track-host {
+      border-bottom: 1px solid color-mix(in srgb, var(--tf-border) 85%, transparent);
+      min-height: 2.85rem;
+      box-sizing: border-box;
+    }
+    .wbs-tl-last-row {
+      border-bottom: none !important;
     }
     .wbs-timeline-scroll-inner {
       width: 100%;
@@ -2973,7 +3038,7 @@
         <p id="wbs-empty" class="hidden text-sm text-center py-8 border border-dashed rounded-xl" style="color: var(--tf-muted); border-color: var(--tf-border);">このプロジェクトにタスクがありません。</p>
         <div id="wbs-table-wrap" class="hidden overflow-x-auto pb-1">
           <div id="wbs-gantt-root"></div>
-          <p id="wbs-legend" class="wbs-legend hidden">横軸は月ごとの期間です。バーの長さと位置がタスクの開始日〜終了日を表します。色は担当者ごとにタスクカードと対応しています。</p>
+          <p id="wbs-legend" class="wbs-legend hidden">横軸は月ごとの期間です。バーの長さと位置がタスクの開始日〜終了日を表します。色は担当者ごとにタスクカードと対応しています。長期表示では下のタイムラインを横にスクロールできます。タイムライン図の直前に、音声読み上げ用のタスク一覧があります（画面上は非表示）。</p>
         </div>
       </div>
     </div>
@@ -6567,6 +6632,8 @@
         titleBtn.textContent = pname;
         titleBtn.setAttribute('aria-haspopup', 'dialog');
         titleBtn.setAttribute('aria-expanded', 'false');
+        titleBtn.setAttribute('aria-controls', 'wbs-modal');
+        titleBtn.setAttribute('data-tf-wbs-trigger', pname);
         titleBtn.setAttribute('aria-label', pname + 'のWBS（作業分解）を表示');
         (function (pn) {
           titleBtn.addEventListener('click', function () {
@@ -7798,6 +7865,169 @@
         return true;
       }
 
+      function wbsMonthSegEndMs(segStartMs) {
+        var x = new Date(segStartMs);
+        x.setMonth(x.getMonth() + 1);
+        return x.getTime();
+      }
+
+      /** 月列の右端（排他的）— 最終列の終わり */
+      function wbsTimelineAxisEndMs(segments, nSeg) {
+        if (!nSeg || !segments.length) return 0;
+        return wbsMonthSegEndMs(segments[nSeg - 1]);
+      }
+
+      /** パディング前の論理レンジがまたぐ暦月の数（スクロール表示の切替に使用） */
+      function wbsCountMonthsInRange(tMinMs, tMaxMs, MS_DAY) {
+        var d = new Date(tMinMs);
+        d.setDate(1);
+        d.setHours(0, 0, 0, 0);
+        if (d.getTime() > tMinMs) d.setMonth(d.getMonth() - 1);
+        var n = 0;
+        while (d.getTime() < tMaxMs + MS_DAY) {
+          n++;
+          var nx = new Date(d);
+          nx.setMonth(nx.getMonth() + 1);
+          d = nx;
+        }
+        return Math.max(1, n);
+      }
+
+      /** segments[j] <= tMs となる最大の j（線形探索の代替） */
+      function wbsSegIndexForTime(tMs, segments, nSeg) {
+        if (!nSeg) return 0;
+        if (tMs < segments[0]) return 0;
+        var lo = 0;
+        var hi = nSeg - 1;
+        while (lo < hi) {
+          var mid = (lo + hi + 1) >> 1;
+          if (segments[mid] <= tMs) lo = mid;
+          else hi = mid - 1;
+        }
+        return lo;
+      }
+
+      /** 各月の実時間幅（ms）と合計 */
+      function wbsMonthWeightsMs(segments, nSeg) {
+        var weights = [];
+        var totalW = 0;
+        var j;
+        for (j = 0; j < nSeg; j++) {
+          var s0 = segments[j];
+          var s1 = j + 1 < nSeg ? segments[j + 1] : wbsMonthSegEndMs(s0);
+          var w = Math.max(1, s1 - s0);
+          weights.push(w);
+          totalW += w;
+        }
+        return { weights: weights, totalW: totalW };
+      }
+
+      function wbsCompactTrackGridBackground(weights, totalW) {
+        if (!weights.length || weights.length < 2 || totalW <= 0) return '';
+        var parts = [];
+        var cum = 0;
+        var b = 'color-mix(in srgb, var(--tf-border) 55%, transparent)';
+        var t = 'transparent';
+        var i;
+        for (i = 0; i < weights.length - 1; i++) {
+          cum += weights[i];
+          var p = (cum / totalW) * 100;
+          var pLo = 'calc(' + p + '% - 0.5px)';
+          var pHi = 'calc(' + p + '% + 0.5px)';
+          parts.push(
+            'linear-gradient(to right, ' +
+              t +
+              ' ' +
+              pLo +
+              ', ' +
+              b +
+              ' ' +
+              pLo +
+              ', ' +
+              b +
+              ' ' +
+              pHi +
+              ', ' +
+              t +
+              ' ' +
+              pHi +
+              ')'
+          );
+        }
+        return parts.join(', ');
+      }
+
+      /**
+       * 各月が同じ幅 colPx のとき、時刻を横位置ピクセルへ（列内はその月のミリ秒に比例）。
+       * ヘッダーの月グリッドと一致させる。
+       */
+      function wbsTimeToPxInMonthColumns(tMs, segments, nSeg, colPx) {
+        if (!nSeg || colPx <= 0) return 0;
+        var axis0 = segments[0];
+        var axis1 = wbsTimelineAxisEndMs(segments, nSeg);
+        if (tMs <= axis0) return 0;
+        if (tMs >= axis1) return nSeg * colPx;
+        var j = wbsSegIndexForTime(tMs, segments, nSeg);
+        var s0 = segments[j];
+        var s1 = j + 1 < nSeg ? segments[j + 1] : axis1;
+        var denom = Math.max(1, s1 - s0);
+        var frac = (tMs - s0) / denom;
+        if (frac < 0) frac = 0;
+        if (frac > 1) frac = 1;
+        return j * colPx + frac * colPx;
+      }
+
+      function wbsBarMetricsPxScroll(sMs, eMsExclusive, segments, nSeg, colPx) {
+        var axis1 = wbsTimelineAxisEndMs(segments, nSeg);
+        var sCl = Math.max(segments[0], Math.min(axis1, sMs));
+        var eCl = Math.max(segments[0], Math.min(axis1, eMsExclusive));
+        var leftPx = wbsTimeToPxInMonthColumns(sCl, segments, nSeg, colPx);
+        var rightPx = wbsTimeToPxInMonthColumns(eCl, segments, nSeg, colPx);
+        if (rightPx < leftPx) rightPx = leftPx;
+        return { leftPx: leftPx, widthPx: Math.max(2.25, rightPx - leftPx) };
+      }
+
+      /** コンパクト: 列 fr が月の ms 幅に比例するとき、バーも同じ重みで % 位置を計算 */
+      function wbsTimeToPctFrWeighted(tMs, segments, nSeg, weights, totalW, axisEndMs) {
+        if (!nSeg || totalW <= 0) return 0;
+        var axis0 = segments[0];
+        if (tMs <= axis0) return 0;
+        if (tMs >= axisEndMs) return 100;
+        var j = wbsSegIndexForTime(tMs, segments, nSeg);
+        var s0 = segments[j];
+        var s1 = j + 1 < nSeg ? segments[j + 1] : axisEndMs;
+        var denom = Math.max(1, s1 - s0);
+        var frac = (tMs - s0) / denom;
+        if (frac < 0) frac = 0;
+        if (frac > 1) frac = 1;
+        var before = 0;
+        var k;
+        for (k = 0; k < j; k++) before += weights[k];
+        var pos = before + frac * weights[j];
+        return (pos / totalW) * 100;
+      }
+
+      function wbsBarMetricsPctFrWeighted(
+        sMs,
+        eMsExclusive,
+        segments,
+        nSeg,
+        weights,
+        totalW,
+        axisEndMs
+      ) {
+        var lp = wbsTimeToPctFrWeighted(sMs, segments, nSeg, weights, totalW, axisEndMs);
+        var rp = wbsTimeToPctFrWeighted(eMsExclusive, segments, nSeg, weights, totalW, axisEndMs);
+        if (lp < 0) lp = 0;
+        if (lp > 100) lp = 100;
+        if (rp < lp) rp = lp;
+        if (rp > 100) rp = 100;
+        return {
+          leftPct: lp,
+          widthPct: Math.max(0.03, rp - lp),
+        };
+      }
+
       function buildWbsGanttDom(wall, wmeta) {
         var MS_DAY = 86400000;
         var tMin = null;
@@ -7805,7 +8035,6 @@
         var i,
           j,
           k,
-          c,
           tk,
           asg,
           list,
@@ -7833,7 +8062,20 @@
           oc,
           chip,
           track,
-          colsWrap,
+          rowFix,
+          trackIn,
+          hdrFix,
+          bodySplit,
+          leftStack,
+          stripSpacer,
+          scrollWrap,
+          scrollInner,
+          taskLeftWrap,
+          trackHost,
+          gBand,
+          bmPx,
+          lastTaskLeft,
+          lastTrackHost,
           sMs,
           eMs,
           leftPct,
@@ -7851,6 +8093,16 @@
         if (useProjectAxis) {
           tMin = wMetaStart.getTime();
           tMax = wMetaEnd.getTime();
+          for (i = 0; i < wall.length; i++) {
+            tk = wall[i];
+            var dSP = parseYMD(tk.start);
+            var dEP = parseYMD(tk.end);
+            if (!dSP || !dEP) continue;
+            var sp0 = dSP.getTime();
+            var ep0 = dEP.getTime();
+            if (sp0 < tMin) tMin = sp0;
+            if (ep0 > tMax) tMax = ep0;
+          }
         } else {
           for (i = 0; i < wall.length; i++) {
             tk = wall[i];
@@ -7877,6 +8129,8 @@
             tMax = tMin + 90 * MS_DAY;
           }
         }
+        var tMinLogical = tMin;
+        var tMaxLogical = tMax;
         var spanRaw = tMax - tMin + MS_DAY;
         var pad = spanRaw * 0.035;
         tMin -= pad;
@@ -7936,8 +8190,9 @@
             (coreMonthB.getMonth() - coreMonthA.getMonth()) +
             1;
         }
-        /** 案件の暦月が3以上、または軸上の月列が3以上なら分割＋横スクロール（登録期間未保存時のズレ補正に nSeg を併用）。月列幅は 200px 固定 */
-        var needsTimeScroll = inclusiveMonths >= 3 || nSeg >= 3;
+        var nSegLogical = wbsCountMonthsInRange(tMinLogical, tMaxLogical, MS_DAY);
+        /** 実データの暦月が3以上で横スクロール。パディングだけで月列が増えてもコンパクトのままにする */
+        var needsTimeScroll = inclusiveMonths >= 3 || nSegLogical >= 3;
 
         var y0 = new Date(segments[0]).getFullYear();
         var y1 = new Date(segments[segments.length - 1]).getFullYear();
@@ -7951,29 +8206,19 @@
           root.className = 'wbs-gantt wbs-gantt--timeline-scroll';
           root.style.setProperty('--wbs-time-total', timeTotalPx + 'px');
 
-          var stripRow = document.createElement('div');
-          stripRow.className = 'wbs-timeline-split-row';
-          var stripGutter = document.createElement('div');
-          stripGutter.className = 'wbs-timeline-fixed-gutter';
-          stripGutter.setAttribute('aria-hidden', 'true');
-          var stripSc = document.createElement('div');
-          stripSc.className = 'wbs-js-sync-scroll';
-          var stripIn = document.createElement('div');
-          stripIn.className = 'wbs-timeline-scroll-inner wbs-year-strip--wide';
-          stripIn.style.width = timeTotalPx + 'px';
-          stripIn.style.minWidth = timeTotalPx + 'px';
-          stripIn.style.maxWidth = timeTotalPx + 'px';
-          stripIn.style.boxSizing = 'border-box';
-          stripIn.textContent = stripTitle;
-          stripSc.appendChild(stripIn);
-          stripRow.appendChild(stripGutter);
-          stripRow.appendChild(stripSc);
-          root.appendChild(stripRow);
+          var bodySplit = document.createElement('div');
+          bodySplit.className = 'wbs-tl-body-split';
 
-          var hdrSplit = document.createElement('div');
-          hdrSplit.className = 'wbs-header-split-row';
-          var hdrFix = document.createElement('div');
-          hdrFix.className = 'wbs-header-split-fixed';
+          var leftStack = document.createElement('div');
+          leftStack.className = 'wbs-tl-left-stack';
+
+          var stripSpacer = document.createElement('div');
+          stripSpacer.className = 'wbs-tl-strip-spacer';
+          stripSpacer.setAttribute('aria-hidden', 'true');
+          leftStack.appendChild(stripSpacer);
+
+          hdrFix = document.createElement('div');
+          hdrFix.className = 'wbs-header-split-fixed wbs-tl-hdr-fix';
           hTask = document.createElement('div');
           hTask.className = 'wbs-hcell wbs-hcell--corner';
           hTask.textContent = 'タスク';
@@ -7982,16 +8227,33 @@
           hOwner.textContent = '担当';
           hdrFix.appendChild(hTask);
           hdrFix.appendChild(hOwner);
-          var hdrSc = document.createElement('div');
-          hdrSc.className = 'wbs-js-sync-scroll';
-          var hdrIn = document.createElement('div');
-          hdrIn.className = 'wbs-timeline-scroll-inner';
-          hdrIn.style.display = 'grid';
-          hdrIn.style.width = timeTotalPx + 'px';
-          hdrIn.style.minWidth = timeTotalPx + 'px';
-          hdrIn.style.maxWidth = timeTotalPx + 'px';
-          hdrIn.style.boxSizing = 'border-box';
-          hdrIn.style.gridTemplateColumns = 'repeat(' + nSeg + ', ' + colPx + 'px)';
+          leftStack.appendChild(hdrFix);
+
+          var scrollWrap = document.createElement('div');
+          scrollWrap.className = 'wbs-tl-single-scroll';
+          scrollWrap.setAttribute(
+            'aria-label',
+            'プロジェクト期間のタイムライン。左右にスクロールして全体を表示できます。'
+          );
+
+          var scrollInner = document.createElement('div');
+          scrollInner.className = 'wbs-tl-scroll-stack';
+          scrollInner.style.width = timeTotalPx + 'px';
+          scrollInner.style.minWidth = timeTotalPx + 'px';
+          scrollInner.style.boxSizing = 'border-box';
+
+          strip = document.createElement('div');
+          strip.className = 'wbs-year-strip--wide';
+          strip.textContent = stripTitle;
+          scrollInner.appendChild(strip);
+
+          hdr = document.createElement('div');
+          hdr.className = 'wbs-gantt-header wbs-tl-hdr-grid';
+          hdr.style.display = 'grid';
+          hdr.style.gridTemplateColumns = 'repeat(' + nSeg + ', ' + colPx + 'px)';
+          hdr.style.width = timeTotalPx + 'px';
+          hdr.style.minWidth = timeTotalPx + 'px';
+          hdr.style.boxSizing = 'border-box';
           for (j = 0; j < nSeg; j++) {
             hc = document.createElement('div');
             hc.className = 'wbs-hcell wbs-hcell--time';
@@ -8004,12 +8266,12 @@
             sub.textContent = D.getFullYear() + '年';
             hc.appendChild(main);
             hc.appendChild(sub);
-            hdrIn.appendChild(hc);
+            hdr.appendChild(hc);
           }
-          hdrSc.appendChild(hdrIn);
-          hdrSplit.appendChild(hdrFix);
-          hdrSplit.appendChild(hdrSc);
-          root.appendChild(hdrSplit);
+          scrollInner.appendChild(hdr);
+
+          var lastTaskLeft = null;
+          var lastTrackHost = null;
 
           wbsIdx = 0;
           for (k = 0; k < keys.length; k++) {
@@ -8030,15 +8292,22 @@
             gCnt.style.color = 'var(--tf-faint)';
             gCnt.textContent = '（' + list.length + ' 件）';
             gRow.appendChild(gCnt);
-            root.appendChild(gRow);
+            leftStack.appendChild(gRow);
+
+            var gBand = document.createElement('div');
+            gBand.className = 'wbs-group-row--scroll-band';
+            gBand.style.width = timeTotalPx + 'px';
+            gBand.setAttribute('aria-hidden', 'true');
+            scrollInner.appendChild(gBand);
 
             for (j = 0; j < list.length; j++) {
               tk = list[j];
               wbsIdx++;
-              row = document.createElement('div');
-              row.className = 'wbs-data-row wbs-data-row--split';
 
-              var rowFix = document.createElement('div');
+              var taskLeftWrap = document.createElement('div');
+              taskLeftWrap.className = 'wbs-tl-task-left';
+
+              rowFix = document.createElement('div');
               rowFix.className = 'wbs-data-row__fixed';
               lab = document.createElement('div');
               lab.className = 'wbs-label';
@@ -8062,42 +8331,36 @@
               chip.textContent = tk.assignee || '（未割当）';
               oc.appendChild(chip);
               rowFix.appendChild(oc);
-              row.appendChild(rowFix);
+              taskLeftWrap.appendChild(rowFix);
+              leftStack.appendChild(taskLeftWrap);
 
-              var rowSc = document.createElement('div');
-              rowSc.className = 'wbs-js-sync-scroll';
-              var trackIn = document.createElement('div');
+              var trackHost = document.createElement('div');
+              trackHost.className = 'wbs-tl-task-track-host';
+              trackHost.style.width = timeTotalPx + 'px';
+              trackHost.style.minWidth = timeTotalPx + 'px';
+
+              trackIn = document.createElement('div');
               trackIn.style.width = timeTotalPx + 'px';
               trackIn.style.minWidth = timeTotalPx + 'px';
-              trackIn.style.maxWidth = timeTotalPx + 'px';
               trackIn.style.position = 'relative';
               trackIn.style.minHeight = '2.85rem';
               trackIn.style.boxSizing = 'border-box';
 
               track = document.createElement('div');
-              track.className = 'wbs-track wbs-track--split';
-
-              colsWrap = document.createElement('div');
-              colsWrap.className = 'wbs-track-cols';
-              colsWrap.style.gridTemplateColumns = 'repeat(' + nSeg + ', ' + colPx + 'px)';
-              for (c = 0; c < nSeg; c++) colsWrap.appendChild(document.createElement('div'));
-              track.appendChild(colsWrap);
+              track.className = 'wbs-track wbs-track--split wbs-track--striped-cols';
 
               dBarS = parseYMD(tk.start);
               dBarE = parseYMD(tk.end);
               if (dBarS && dBarE) {
                 sMs = dBarS.getTime();
                 eMs = dBarE.getTime() + MS_DAY;
-                leftPct = ((sMs - tMin) / span) * 100;
-                wPct = ((eMs - sMs) / span) * 100;
-                leftPct = Math.max(0, Math.min(99.25, leftPct));
-                wPct = Math.max(0.55, Math.min(100 - leftPct, wPct));
+                bmPx = wbsBarMetricsPxScroll(sMs, eMs, segments, nSeg, colPx);
 
                 bar = document.createElement('div');
                 bar.className =
                   'wbs-bar wbs-bar--tone-' + assigneeToneClassSuffix(tk.assignee || '（未割当）');
-                bar.style.left = leftPct + '%';
-                bar.style.width = wPct + '%';
+                bar.style.left = bmPx.leftPx + 'px';
+                bar.style.width = bmPx.widthPx + 'px';
                 barLabel = tk.title || '';
                 if (barLabel.length > 34) barLabel = barLabel.slice(0, 33) + '…';
                 bar.textContent = barLabel;
@@ -8122,31 +8385,37 @@
                 track.appendChild(noBar);
               }
               trackIn.appendChild(track);
-              rowSc.appendChild(trackIn);
-              row.appendChild(rowSc);
-              root.appendChild(row);
+              trackHost.appendChild(trackIn);
+              scrollInner.appendChild(trackHost);
+
+              lastTaskLeft = taskLeftWrap;
+              lastTrackHost = trackHost;
             }
           }
 
-          var syncNodes = root.querySelectorAll('.wbs-js-sync-scroll');
-          function onWbsSyncScroll(e) {
-            var src = e.target;
-            if (!src || !src.classList || !src.classList.contains('wbs-js-sync-scroll')) return;
-            var x = src.scrollLeft;
-            for (var si = 0; si < syncNodes.length; si++) {
-              if (syncNodes[si] === src) continue;
-              if (syncNodes[si].scrollLeft !== x) syncNodes[si].scrollLeft = x;
-            }
-          }
-          for (var sj = 0; sj < syncNodes.length; sj++) {
-            syncNodes[sj].addEventListener('scroll', onWbsSyncScroll);
-          }
+          if (lastTaskLeft) lastTaskLeft.classList.add('wbs-tl-last-row');
+          if (lastTrackHost) lastTrackHost.classList.add('wbs-tl-last-row');
+
+          scrollWrap.appendChild(scrollInner);
+          bodySplit.appendChild(leftStack);
+          bodySplit.appendChild(scrollWrap);
+          root.appendChild(bodySplit);
 
           return root;
         }
 
+        var axisEndForBars = wbsTimelineAxisEndMs(segments, nSeg);
+        var mwPack = wbsMonthWeightsMs(segments, nSeg);
+        var monthW = mwPack.weights;
+        var totalMonthW = mwPack.totalW;
+        var frParts = [];
+        for (j = 0; j < nSeg; j++) {
+          frParts.push(monthW[j] / MS_DAY + 'fr');
+        }
+        var frColsStr = frParts.join(' ');
+        var compactGridBg = wbsCompactTrackGridBackground(monthW, totalMonthW);
         colTemplate =
-          'minmax(11rem,22rem) minmax(6rem,8rem) repeat(' + nSeg + ', minmax(1.85rem, 1fr))';
+          'minmax(11rem,22rem) minmax(6rem,8rem) ' + frColsStr;
 
         root = document.createElement('div');
         root.className = 'wbs-gantt';
@@ -8241,22 +8510,28 @@
 
             track = document.createElement('div');
             track.className = 'wbs-track';
-
-            colsWrap = document.createElement('div');
-            colsWrap.className = 'wbs-track-cols';
-            colsWrap.style.gridTemplateColumns = 'repeat(' + nSeg + ', 1fr)';
-            for (c = 0; c < nSeg; c++) colsWrap.appendChild(document.createElement('div'));
-            track.appendChild(colsWrap);
+            if (compactGridBg) {
+              track.style.backgroundImage = compactGridBg;
+              track.style.backgroundRepeat = 'no-repeat';
+              track.style.backgroundSize = '100% 100%';
+            }
 
             dBarS = parseYMD(tk.start);
             dBarE = parseYMD(tk.end);
             if (dBarS && dBarE) {
               sMs = dBarS.getTime();
               eMs = dBarE.getTime() + MS_DAY;
-              leftPct = ((sMs - tMin) / span) * 100;
-              wPct = ((eMs - sMs) / span) * 100;
-              leftPct = Math.max(0, Math.min(99.25, leftPct));
-              wPct = Math.max(0.55, Math.min(100 - leftPct, wPct));
+              var bmFr = wbsBarMetricsPctFrWeighted(
+                sMs,
+                eMs,
+                segments,
+                nSeg,
+                monthW,
+                totalMonthW,
+                axisEndForBars
+              );
+              leftPct = bmFr.leftPct;
+              wPct = bmFr.widthPct;
 
               bar = document.createElement('div');
               bar.className =
@@ -8325,6 +8600,56 @@
         e.value = m.end ? String(m.end) : ts;
       }
 
+      function setWbsTriggerExpanded(projectName, expanded) {
+        var pn = String(projectName || '').trim();
+        var nodes = document.querySelectorAll('[data-tf-wbs-trigger]');
+        var i;
+        for (i = 0; i < nodes.length; i++) {
+          var el = nodes[i];
+          var tpn = String(el.getAttribute('data-tf-wbs-trigger') || '').trim();
+          if (expanded && tpn === pn) el.setAttribute('aria-expanded', 'true');
+          else el.setAttribute('aria-expanded', 'false');
+        }
+      }
+
+      /** スクリーンリーダー向け: タイムラインに依存しないタスク一覧 */
+      function buildWbsAccessibleSummary(wall, pname) {
+        var wrap = document.createElement('div');
+        wrap.id = 'wbs-sr-summary';
+        wrap.className = 'sr-only';
+        wrap.setAttribute('role', 'region');
+        wrap.setAttribute(
+          'aria-label',
+          (pname ? pname + 'の' : '') + 'WBSタスク一覧（音声読み上げ用）'
+        );
+        var intro = document.createElement('p');
+        intro.textContent =
+          '以下はタスクの一覧です。タイムライン上のバーは視覚的な補助であり、期間の詳細は各項目のテキストを参照してください。';
+        wrap.appendChild(intro);
+        var sorted = wall.slice().sort(function (a, b) {
+          return sortKeyStart(a.start) - sortKeyStart(b.start);
+        });
+        var ul = document.createElement('ul');
+        var ii;
+        for (ii = 0; ii < sorted.length; ii++) {
+          var t = sorted[ii];
+          var li = document.createElement('li');
+          var rng = formatRange(t.start, t.end);
+          li.textContent =
+            (t.title || '（無題）') +
+            '。担当 ' +
+            (t.assignee || '未割当') +
+            '。期間 ' +
+            rng +
+            '。進捗 ' +
+            String(t.progress) +
+            'パーセント。';
+          ul.appendChild(li);
+        }
+        wrap.appendChild(ul);
+        return wrap;
+      }
+
       function refreshWbsModalInner(pname) {
         pname = (pname || '').trim();
         var wbsTitle = document.getElementById('wbs-modal-title');
@@ -8363,7 +8688,12 @@
           if (wbsEmptyMsg) wbsEmptyMsg.classList.add('hidden');
           if (wbsTableWrap) wbsTableWrap.classList.remove('hidden');
           if (wbsLegend) wbsLegend.classList.remove('hidden');
-          wbsGanttRoot.appendChild(buildWbsGanttDom(wall, wmeta));
+          var frag = document.createDocumentFragment();
+          frag.appendChild(buildWbsAccessibleSummary(wall, pname));
+          var chart = buildWbsGanttDom(wall, wmeta);
+          chart.setAttribute('aria-hidden', 'true');
+          frag.appendChild(chart);
+          wbsGanttRoot.appendChild(frag);
         }
       }
 
@@ -8385,12 +8715,14 @@
         var cwbs = document.getElementById('close-wbs-modal');
         if (cwbs && typeof cwbs.focus === 'function') cwbs.focus();
         installModalFocusTrap('wbs');
+        setWbsTriggerExpanded(pname, true);
       }
 
       function closeWbsModal() {
         if (modalOpen !== 'wbs') return;
         teardownModalFocusTrap();
         modalOpen = false;
+        setWbsTriggerExpanded('', false);
         wbsOpenProjectName = '';
         hideWbsEditPanel();
         appMain.removeAttribute('aria-hidden');
